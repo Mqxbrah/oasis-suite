@@ -1,0 +1,25 @@
+.main-container {
+    background-color: #121212;
+    width: 1s;
+    height: 1s;
+    child-space: 12px;
+    row-between: 12px;
+}
+
+.plugin-title {
+    width: 1s;
+    height: auto;
+    font-size: 20;
+    color: #ffffff;
+    child-space: 1s;
+    text-align: center;
+    top: 8px;
+    bottom: 8px;
+}
+
+.generic-ui {
+    width: 1s;
+    height: 1s;
+    child-space: 8px;
+    row-between: 4px;
+}
