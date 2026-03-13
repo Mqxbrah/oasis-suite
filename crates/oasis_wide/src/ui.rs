@@ -12,10 +12,14 @@ use crate::presets;
 struct Data {
     params: Arc<OasisWideParams>,
     preset_name: String,
+    show_preset_list: bool,
 }
 
+#[derive(Debug, Clone)]
 enum DataEvent {
     PresetChanged,
+    TogglePresetList,
+    ClosePresetList,
 }
 
 impl Model for Data {
@@ -23,6 +27,13 @@ impl Model for Data {
         event.map(|e, _| match e {
             DataEvent::PresetChanged => {
                 self.preset_name = presets::current_preset_name().to_string();
+                self.show_preset_list = false;
+            }
+            DataEvent::TogglePresetList => {
+                self.show_preset_list = !self.show_preset_list;
+            }
+            DataEvent::ClosePresetList => {
+                self.show_preset_list = false;
             }
         });
     }
@@ -32,6 +43,45 @@ impl Model for Data {
 enum PresetAction {
     Next,
     Previous,
+    Select(usize),
+}
+
+fn apply_preset(cx: &mut EventContext, idx: usize) {
+    if idx >= presets::FACTORY_PRESETS.len() {
+        return;
+    }
+
+    presets::CURRENT_PRESET_INDEX.store(idx, std::sync::atomic::Ordering::Relaxed);
+    let preset = &presets::FACTORY_PRESETS[idx];
+
+    let updates: Vec<(ParamPtr, f32)> = if let Some(data) = cx.data::<Data>() {
+        let params = &data.params;
+        preset.values.iter().filter_map(|&(param_id, norm_val)| {
+            let ptr = match param_id {
+                "width" => Some(params.width.as_ptr()),
+                "mid_gain" => Some(params.mid_gain.as_ptr()),
+                "side_gain" => Some(params.side_gain.as_ptr()),
+                "haas_delay" => Some(params.haas_delay_ms.as_ptr()),
+                "haas_channel" => Some(params.haas_channel.as_ptr()),
+                "bass_mono_on" => Some(params.bass_mono_enabled.as_ptr()),
+                "bass_mono_freq" => Some(params.bass_mono_freq.as_ptr()),
+                "mix" => Some(params.mix.as_ptr()),
+                "output_gain" => Some(params.output_gain.as_ptr()),
+                _ => None,
+            };
+            ptr.map(|p| (p, norm_val))
+        }).collect()
+    } else {
+        return;
+    };
+
+    for (ptr, norm_val) in updates {
+        cx.emit(RawParamEvent::BeginSetParameter(ptr));
+        cx.emit(RawParamEvent::SetParameterNormalized(ptr, norm_val));
+        cx.emit(RawParamEvent::EndSetParameter(ptr));
+    }
+
+    cx.emit(DataEvent::PresetChanged);
 }
 
 struct PresetBrowser;
@@ -42,8 +92,28 @@ impl PresetBrowser {
             HStack::new(cx, |cx| {
                 ArrowButton::new(cx, ArrowDirection::Left, PresetAction::Previous);
 
-                Label::new(cx, Data::preset_name)
-                    .class("preset-name");
+                VStack::new(cx, |cx| {
+                    Label::new(cx, Data::preset_name)
+                        .class("preset-name")
+                        .on_press(|cx| cx.emit(DataEvent::TogglePresetList));
+
+                    Popup::new(cx, Data::show_preset_list, false, |cx| {
+                        VStack::new(cx, |cx| {
+                            for (i, preset) in presets::FACTORY_PRESETS.iter().enumerate() {
+                                let idx = i;
+                                Label::new(cx, preset.name)
+                                    .class("preset-list-item")
+                                    .on_press(move |cx| {
+                                        cx.emit(PresetAction::Select(idx));
+                                    });
+                            }
+                        })
+                        .class("preset-dropdown");
+                    })
+                    .on_blur(|cx| cx.emit(DataEvent::ClosePresetList))
+                    .class("preset-popup-wrapper");
+                })
+                .class("preset-name-container");
 
                 ArrowButton::new(cx, ArrowDirection::Right, PresetAction::Next);
             })
@@ -56,45 +126,22 @@ impl View for PresetBrowser {
     fn event(&mut self, cx: &mut EventContext, event: &mut Event) {
         event.map(|action, _| {
             match action {
-                PresetAction::Next => { presets::next_preset(); }
-                PresetAction::Previous => { presets::prev_preset(); }
+                PresetAction::Next => {
+                    presets::next_preset();
+                    let idx = presets::CURRENT_PRESET_INDEX
+                        .load(std::sync::atomic::Ordering::Relaxed);
+                    apply_preset(cx, idx);
+                }
+                PresetAction::Previous => {
+                    presets::prev_preset();
+                    let idx = presets::CURRENT_PRESET_INDEX
+                        .load(std::sync::atomic::Ordering::Relaxed);
+                    apply_preset(cx, idx);
+                }
+                PresetAction::Select(idx) => {
+                    apply_preset(cx, *idx);
+                }
             }
-
-            let idx = presets::CURRENT_PRESET_INDEX
-                .load(std::sync::atomic::Ordering::Relaxed);
-            if idx >= presets::FACTORY_PRESETS.len() {
-                return;
-            }
-            let preset = &presets::FACTORY_PRESETS[idx];
-
-            let updates: Vec<(ParamPtr, f32)> = if let Some(data) = cx.data::<Data>() {
-                let params = &data.params;
-                preset.values.iter().filter_map(|&(param_id, norm_val)| {
-                    let ptr = match param_id {
-                        "width" => Some(params.width.as_ptr()),
-                        "mid_gain" => Some(params.mid_gain.as_ptr()),
-                        "side_gain" => Some(params.side_gain.as_ptr()),
-                        "haas_delay" => Some(params.haas_delay_ms.as_ptr()),
-                        "haas_channel" => Some(params.haas_channel.as_ptr()),
-                        "bass_mono_on" => Some(params.bass_mono_enabled.as_ptr()),
-                        "bass_mono_freq" => Some(params.bass_mono_freq.as_ptr()),
-                        "mix" => Some(params.mix.as_ptr()),
-                        "output_gain" => Some(params.output_gain.as_ptr()),
-                        _ => None,
-                    };
-                    ptr.map(|p| (p, norm_val))
-                }).collect()
-            } else {
-                return;
-            };
-
-            for (ptr, norm_val) in updates {
-                cx.emit(RawParamEvent::BeginSetParameter(ptr));
-                cx.emit(RawParamEvent::SetParameterNormalized(ptr, norm_val));
-                cx.emit(RawParamEvent::EndSetParameter(ptr));
-            }
-
-            cx.emit(DataEvent::PresetChanged);
         });
     }
 }
@@ -156,11 +203,11 @@ pub fn create_editor(params: Arc<OasisWideParams>) -> Option<Box<dyn Editor>> {
         Data {
             params: params.clone(),
             preset_name: presets::current_preset_name().to_string(),
+            show_preset_list: false,
         }
         .build(cx);
 
         VStack::new(cx, |cx| {
-            // ── Header Bar ──
             HStack::new(cx, |cx| {
                 Label::new(cx, "OASIS WIDE")
                     .font_family(vec![FamilyOwned::Name(String::from(
@@ -176,9 +223,7 @@ pub fn create_editor(params: Arc<OasisWideParams>) -> Option<Box<dyn Editor>> {
             })
             .class("header-bar");
 
-            // ── Main Content ──
             HStack::new(cx, |cx| {
-                // ── Left Column ──
                 VStack::new(cx, |cx| {
                     VStack::new(cx, |cx| {
                         Label::new(cx, "STEREO IMAGE").class("section-title");
@@ -203,7 +248,6 @@ pub fn create_editor(params: Arc<OasisWideParams>) -> Option<Box<dyn Editor>> {
                 })
                 .class("column");
 
-                // ── Right Column ──
                 VStack::new(cx, |cx| {
                     VStack::new(cx, |cx| {
                         Label::new(cx, "HAAS EFFECT").class("section-title");
@@ -230,7 +274,6 @@ pub fn create_editor(params: Arc<OasisWideParams>) -> Option<Box<dyn Editor>> {
             .class("columns")
             .class("content-area");
 
-            // ── Footer ──
             HStack::new(cx, |cx| {
                 Label::new(cx, "Oasis Suite").class("footer-text");
             })

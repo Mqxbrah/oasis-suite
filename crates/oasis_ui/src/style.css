@@ -72,6 +72,13 @@ arrow-btn:active {
     background-color: #48484a;
 }
 
+.preset-name-container {
+    width: auto;
+    height: auto;
+    left: 2px;
+    right: 2px;
+}
+
 .preset-name {
     width: 160px;
     height: 24px;
@@ -80,8 +87,43 @@ arrow-btn:active {
     color: #e0e0e0;
     font-size: 12;
     child-space: 1s;
-    left: 2px;
-    right: 2px;
+    cursor: hand;
+}
+
+.preset-name:hover {
+    background-color: #3a3a3c;
+}
+
+.preset-popup-wrapper {
+    width: 0px;
+    height: 0px;
+}
+
+.preset-dropdown {
+    background-color: #2a2a2c;
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: #3a3a3c;
+    width: 160px;
+    child-space: 2px;
+    row-between: 0px;
+}
+
+.preset-list-item {
+    width: 1s;
+    height: 26px;
+    font-size: 12;
+    color: #d0d0d0;
+    child-left: 10px;
+    child-top: 1s;
+    child-bottom: 1s;
+    cursor: hand;
+}
+
+.preset-list-item:hover {
+    background-color: #0a84ff;
+    color: #ffffff;
+    border-radius: 4px;
 }
 
 /* ── Content Area ── */
