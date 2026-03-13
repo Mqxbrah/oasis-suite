@@ -1,0 +1,17 @@
+[package]
+name = "oasis_core"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+nih_plug = { workspace = true }
+atomic_float = { workspace = true }
+
+[features]
+default = []
+debug-dsp = []
+debug-metrics = []
+debug-logging = []
+debug-all = ["debug-dsp", "debug-metrics", "debug-logging"]

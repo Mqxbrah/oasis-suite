@@ -1,11 +1,6 @@
-# Dependencies
-node_modules/
-package-lock.json
-
-# Build outputs
-dist/
-build/
-.next/
+# Rust build artifacts
+/target
+**/*.rs.bk
 
 # OS files
 .DS_Store
@@ -23,8 +18,3 @@ Thumbs.db
 
 # Logs
 *.log
-npm-debug.log*
-
-# Cache
-.cache/
-.parcel-cache/
