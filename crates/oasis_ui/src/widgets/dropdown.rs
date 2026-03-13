@@ -27,16 +27,7 @@ impl View for DropdownOverlay {
         Some("dropdown-overlay")
     }
 
-    fn event(&mut self, cx: &mut EventContext, event: &mut Event) {
-        event.map(|window_event, meta| {
-            if let WindowEvent::MouseDown(_) = window_event {
-                if !cx.hovered.is_descendant_of(cx.tree, cx.current) 
-                    && cx.hovered != cx.current() 
-                {
-                    meta.consume();
-                }
-            }
-        });
+    fn event(&mut self, _cx: &mut EventContext, _event: &mut Event) {
     }
 
     fn draw(&self, cx: &mut DrawContext, canvas: &mut Canvas) {
