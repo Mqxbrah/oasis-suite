@@ -536,11 +536,36 @@ Every plugin follows the same spatial layout:
 
 ## Distribution
 
-**Model:** DRM-free, no license keys, no activation required.
+### Purchase Models (Two Options)
 
+**1. Individual Plugin Purchase (One-Time)**
+- Buy any single plugin as a permanent one-time purchase
 - Sold via Shopify as digital downloads
-- Anyone with the files can use them — no phoning home
-- Free updates for the version purchased
+- Free updates for the major version purchased (e.g., all 1.x updates)
+- No subscription required — own it forever
+
+**2. Suite Subscription (Monthly)**
+- Monthly subscription grants access to the entire Oasis Suite (all plugins)
+- While subscribed: full access to every plugin, all updates, new plugins as they release
+- When subscription expires: plugins stop working (license validation fails)
+- Can resubscribe at any time to regain access
+- Subscription managed via Shopify or dedicated licensing portal
+
+### Licensing System (Future Implementation)
+
+- **License validation required** — plugins check license status on launch
+- Individual purchases: validated once, stored locally, no recurring checks needed (offline-friendly)
+- Subscriptions: periodic validation (e.g., once per day/week when online) to confirm active subscription
+- Grace period for temporary offline use (subscription users)
+- Clear UI messaging when license expires ("Subscription expired — Subscribe at oasis-suite.com")
+- Plugin should degrade gracefully on license failure (mute output or show overlay, never crash)
+- License tied to user account, not machine (reasonable device limit, e.g., 3 machines)
+
+### Technical Notes for Licensing
+- License check should NOT happen on the audio thread — only on UI thread or at plugin init
+- License status cached locally to minimize network calls
+- Licensing system will be implemented later — current builds have no licensing (development mode)
+- Architecture should anticipate a `license` module in `oasis_core` that all plugins call during `initialize()`
 
 **File Format:**
 - **No installer** — Just the raw `.vst3` file(s)
