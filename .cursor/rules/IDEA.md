@@ -9,8 +9,9 @@ A professional VST3 plugin suite built from scratch. No JUCE, no frameworks — 
 ### Technical
 
 **Framework**
-- VST3 SDK only — no JUCE, no FAUST, no external frameworks
-- No Xcode dependency — command-line build system only
+- **nih-plug** (Rust) for VST3 plugin framework — no JUCE, no FAUST, no C++ frameworks
+- **Vizia** for UI (via nih-plug integration) — vector graphics, GPU-accelerated
+- No Xcode dependency — command-line build system only (Cargo + Make)
 - Cross-platform codebase (macOS + Windows), but **focus on macOS first**
 - Test primarily in **FL Studio** during development
 

@@ -1462,9 +1462,124 @@ Conditional compilation for debug views:
 ```rust
 #[cfg(feature = "debug-dsp")]
 fn draw_debug_overlay(&self, cx: &mut DrawContext, canvas: &mut Canvas) {
-    // Show filter frequency response
-    // Show envelope detector state
-    // Show parameter smoothing curves
+    // Show filter frequency response curves
+    // Show envelope detector state (attack/release tracking)
+    // Show parameter smoothing curves (target vs actual)
+}
+```
+
+### NaN/Inf Detection
+
+Catches bad DSP output early, before it propagates through the signal chain:
+
+```rust
+#[cfg(feature = "debug-dsp")]
+pub struct SignalValidator {
+    nan_count: AtomicU64,
+    inf_count: AtomicU64,
+    last_nan_location: AtomicU32,  // Encoded stage ID
+}
+
+#[cfg(feature = "debug-dsp")]
+impl SignalValidator {
+    /// Call after each DSP stage to catch where corruption originates
+    #[inline]
+    pub fn check(&self, sample: f32, stage_id: u32) -> f32 {
+        if sample.is_nan() {
+            self.nan_count.fetch_add(1, Ordering::Relaxed);
+            self.last_nan_location.store(stage_id, Ordering::Relaxed);
+            0.0
+        } else if sample.is_infinite() {
+            self.inf_count.fetch_add(1, Ordering::Relaxed);
+            0.0
+        } else {
+            sample
+        }
+    }
+}
+
+// In release builds, compiles to nothing
+#[cfg(not(feature = "debug-dsp"))]
+#[inline(always)]
+pub fn check_signal(_sample: f32, _stage: u32) -> f32 { _sample }
+```
+
+### Parameter Inspector Overlay
+
+Real-time parameter values shown in a debug panel — useful for verifying automation and smoothing behavior:
+
+```rust
+#[cfg(feature = "debug-dsp")]
+pub struct ParamInspector {
+    /// Stores current raw + smoothed values for each param
+    snapshots: Vec<ParamSnapshot>,
+}
+
+#[cfg(feature = "debug-dsp")]
+pub struct ParamSnapshot {
+    pub name: &'static str,
+    pub raw: AtomicF32,       // Value from DAW/UI
+    pub smoothed: AtomicF32,  // Value after smoothing
+}
+```
+
+### CPU Profiler Per DSP Stage
+
+Breaks down where processing time is spent within a single plugin:
+
+```rust
+#[cfg(feature = "debug-metrics")]
+pub struct StageProfiler {
+    stages: [StageTiming; MAX_DSP_STAGES],
+    num_stages: usize,
+}
+
+#[cfg(feature = "debug-metrics")]
+pub struct StageTiming {
+    pub name: &'static str,
+    pub cycles: AtomicU64,
+    pub calls: AtomicU64,
+}
+
+#[cfg(feature = "debug-metrics")]
+impl StageProfiler {
+    pub fn time_stage<F, R>(&self, stage_index: usize, f: F) -> R
+    where F: FnOnce() -> R {
+        let start = rdtsc();
+        let result = f();
+        let elapsed = rdtsc() - start;
+        self.stages[stage_index].cycles.fetch_add(elapsed, Ordering::Relaxed);
+        self.stages[stage_index].calls.fetch_add(1, Ordering::Relaxed);
+        result
+    }
+
+    pub fn report(&self) -> Vec<(&'static str, f64)> {
+        self.stages[..self.num_stages].iter().map(|s| {
+            let avg = s.cycles.load(Ordering::Relaxed) as f64
+                    / s.calls.load(Ordering::Relaxed).max(1) as f64;
+            (s.name, avg)
+        }).collect()
+    }
+}
+```
+
+### Audio Buffer Scope
+
+Writes raw audio buffer contents to a ring buffer that the debug UI can display as a waveform — useful for visually verifying signal flow at specific points in the chain:
+
+```rust
+#[cfg(feature = "debug-dsp")]
+pub struct AudioScope {
+    buffer: [AtomicF32; SCOPE_BUFFER_SIZE],
+    write_pos: AtomicUsize,
+}
+
+#[cfg(feature = "debug-dsp")]
+impl AudioScope {
+    pub fn write_sample(&self, sample: f32) {
+        let pos = self.write_pos.fetch_add(1, Ordering::Relaxed) % SCOPE_BUFFER_SIZE;
+        self.buffer[pos].store(sample, Ordering::Relaxed);
+    }
 }
 ```
 
@@ -1472,7 +1587,11 @@ fn draw_debug_overlay(&self, cx: &mut DrawContext, canvas: &mut Canvas) {
 
 ## Data Flow
 
-### Audio Thread → UI Thread
+There are two communication channels between threads. Each is strictly one-directional.
+
+### Visualization Data: Audio Thread → UI Thread
+
+Meter levels, spectrum data, gain reduction — the audio thread writes, the UI thread reads. Never the reverse on this channel.
 
 ```
 ┌─────────────────┐
@@ -1498,7 +1617,9 @@ fn draw_debug_overlay(&self, cx: &mut DrawContext, canvas: &mut Canvas) {
 └─────────────────┘      └───────────────────┘
 ```
 
-### Parameter Updates
+### Parameter Updates: UI Thread → Audio Thread
+
+When the user (or DAW automation) changes a parameter, nih-plug handles the thread-safe handoff. The audio thread consumes smoothed values — no custom locking needed.
 
 ```
 ┌─────────────────┐
@@ -1514,7 +1635,8 @@ fn draw_debug_overlay(&self, cx: &mut DrawContext, canvas: &mut Canvas) {
 └────────┼────────┘
          │
          │  (nih-plug handles
-         │   thread-safe update)
+         │   thread-safe update
+         │   via internal atomics)
          │
          ▼
 ┌─────────────────┐
@@ -1530,16 +1652,33 @@ fn draw_debug_overlay(&self, cx: &mut DrawContext, canvas: &mut Canvas) {
 └─────────────────┘
 ```
 
+**Summary:** Visualization flows Audio → UI. Parameters flow UI → Audio. Both channels use lock-free mechanisms (atomics, ring buffers, nih-plug internals). Neither channel ever blocks the other.
+
 ---
 
 ## Preset System
 
 ### Factory Presets (Baked In)
 
+Factory presets store normalized values (0.0–1.0) so they're sample-rate-independent and forward-compatible. The `ParamValue` enum handles both float and enum parameters.
+
 ```rust
 // presets.rs
 
 use oasis_core::preset::FactoryPreset;
+
+/// Normalized parameter values — floats in 0..1, enums as integer index
+pub enum ParamValue {
+    Float(f32),    // Normalized 0.0–1.0
+    Enum(i32),     // Enum variant index
+}
+
+pub struct FactoryPreset {
+    pub name: &'static str,
+    pub category: &'static str,
+    pub author: &'static str,
+    pub params: &'static [(&'static str, ParamValue)],
+}
 
 pub const FACTORY_PRESETS: &[FactoryPreset] = &[
     FactoryPreset {
@@ -1547,23 +1686,12 @@ pub const FACTORY_PRESETS: &[FactoryPreset] = &[
         category: "Default",
         author: "Oasis Suite",
         params: &[
-            ("gain", 0.0),
-            ("threshold", -20.0),
-            ("ratio", 4.0),
-            ("attack", 10.0),
-            ("release", 100.0),
-        ],
-    },
-    FactoryPreset {
-        name: "Vocal Glue",
-        category: "Vocals",
-        author: "Oasis Suite",
-        params: &[
-            ("gain", 0.0),
-            ("threshold", -18.0),
-            ("ratio", 3.0),
-            ("attack", 15.0),
-            ("release", 150.0),
+            ("gain", ParamValue::Float(0.5)),
+            ("threshold", ParamValue::Float(0.33)),
+            ("ratio", ParamValue::Float(0.25)),
+            ("attack", ParamValue::Float(0.15)),
+            ("release", ParamValue::Float(0.4)),
+            ("detection_mode", ParamValue::Enum(0)),  // Peak
         ],
     },
     // ... more presets
@@ -1572,39 +1700,52 @@ pub const FACTORY_PRESETS: &[FactoryPreset] = &[
 
 ### User Presets (.oasis format)
 
+JSON-based for human readability and easy debugging. Validated by `plugin_id` (not a binary magic number — that pattern doesn't add value in a JSON format).
+
 ```rust
-// Simple JSON-based format
 #[derive(Serialize, Deserialize)]
 pub struct OasisPreset {
-    pub magic: u32,              // "OASI" = 0x4941534F
-    pub version: u32,            // Format version
-    pub plugin_id: String,       // "oasis_comp", "oasis_eq", etc.
-    pub plugin_version: String,  // "1.0.0"
+    pub format_version: u32,       // Preset format version (for migration)
+    pub plugin_id: String,         // "oasis_comp", "oasis_eq", etc.
+    pub plugin_version: String,    // "1.0.0"
     pub name: String,
     pub author: String,
-    pub params: HashMap<String, f32>,
+    pub params: HashMap<String, serde_json::Value>,  // Supports f64, i64, bool, string
+}
+
+#[derive(Debug)]
+pub enum PresetError {
+    IoError(std::io::Error),
+    ParseError(serde_json::Error),
+    WrongPlugin { expected: String, got: String },
+    CorruptFile,
+    VersionTooNew { file_ver: u32, plugin_ver: u32 },
 }
 
 impl OasisPreset {
-    pub fn save(&self, path: &Path) -> Result<()> {
-        let json = serde_json::to_string_pretty(self)?;
-        std::fs::write(path, json)?;
+    pub fn save(&self, path: &Path) -> Result<(), PresetError> {
+        let json = serde_json::to_string_pretty(self).map_err(PresetError::ParseError)?;
+        std::fs::write(path, json).map_err(PresetError::IoError)?;
         Ok(())
     }
-    
-    pub fn load(path: &Path) -> Result<Self> {
-        let json = std::fs::read_to_string(path)?;
-        let preset: Self = serde_json::from_str(&json)?;
-        
-        // Validate plugin type
-        if preset.magic != 0x4941534F {
-            return Err("Invalid preset file".into());
+
+    pub fn load(path: &Path, expected_plugin_id: &str) -> Result<Self, PresetError> {
+        let json = std::fs::read_to_string(path).map_err(PresetError::IoError)?;
+        let preset: Self = serde_json::from_str(&json).map_err(PresetError::ParseError)?;
+
+        if preset.plugin_id != expected_plugin_id {
+            return Err(PresetError::WrongPlugin {
+                expected: expected_plugin_id.to_string(),
+                got: preset.plugin_id.clone(),
+            });
         }
-        
+
         Ok(preset)
     }
 }
 ```
+
+**Forward compatibility:** When loading a preset from an older version, unknown parameters are ignored. When loading from a newer version, missing parameters keep their current values. This means presets never break across updates.
 
 ---
 
@@ -1618,20 +1759,19 @@ impl OasisPreset {
 | Integration tests | `tests/` directory | `cargo test` |
 | Audio thread safety | `xtask test-audio-thread` | `make test` |
 | Preset compatibility | `tests/preset_compatibility.rs` | `cargo test` |
+| Signal integrity | `tests/signal_integrity.rs` | `cargo test` |
+| Bypass correctness | `tests/bypass.rs` | `cargo test` |
+| Latency reporting | `tests/latency.rs` | `cargo test` |
 
 ### Audio Thread Safety Tests
 
 ```rust
-// tests/audio_thread_safety.rs
-
 #[test]
 fn test_no_allocations_in_process() {
-    // Use a custom allocator that panics on audio thread
     let plugin = OasisComp::default();
     let mut buffer = create_test_buffer(512);
     
-    // This should complete without triggering allocator
-    enter_audio_thread_context();
+    enter_audio_thread_context();  // Custom allocator that panics on alloc
     plugin.process(&mut buffer, ...);
     exit_audio_thread_context();
 }
@@ -1640,15 +1780,12 @@ fn test_no_allocations_in_process() {
 fn test_sample_rate_change() {
     let mut plugin = OasisComp::default();
     
-    // Initialize at 44.1kHz
     plugin.initialize(44100.0);
     let output_44k = plugin.process_test_signal();
     
-    // Change to 96kHz
     plugin.initialize(96000.0);
     let output_96k = plugin.process_test_signal();
     
-    // Verify frequency response is consistent
     assert_frequency_response_matches(output_44k, output_96k);
 }
 ```
@@ -1659,47 +1796,106 @@ fn test_sample_rate_change() {
 #[test]
 fn test_rapid_parameter_automation() {
     let plugin = OasisComp::default();
-    let mut buffer = create_test_buffer(64);  // Small buffer
+    let mut buffer = create_test_buffer(64);
     
     for _ in 0..10000 {
-        // Randomly change parameters
         plugin.params().threshold.set_plain_value(random_range(-60.0, 0.0));
         plugin.params().ratio.set_plain_value(random_range(1.0, 20.0));
-        
-        // Process (should not click/pop)
         plugin.process(&mut buffer, ...);
     }
     
-    // Verify no discontinuities in output
     assert_no_discontinuities(&buffer);
+}
+```
+
+### Signal Integrity Tests
+
+```rust
+#[test]
+fn test_no_nan_inf_output() {
+    let mut plugin = OasisComp::default();
+    let mut buffer = create_test_buffer(1024);
+    
+    // Feed edge case inputs: silence, DC offset, full-scale, denormals
+    let test_signals = [
+        vec![0.0f32; 1024],           // silence
+        vec![1.0f32; 1024],           // DC
+        vec![f32::MIN_POSITIVE; 1024], // denormal-adjacent
+    ];
+    
+    for signal in &test_signals {
+        fill_buffer(&mut buffer, signal);
+        plugin.process(&mut buffer, ...);
+        assert_all_finite(&buffer);
+    }
+}
+```
+
+### Bypass Correctness Test
+
+```rust
+#[test]
+fn test_bypass_is_transparent() {
+    let mut plugin = OasisComp::default();
+    let input = create_test_signal_stereo(1024);
+    
+    // Enable bypass
+    plugin.params().bypass.set_plain_value(1.0);
+    
+    let mut buffer = input.clone();
+    plugin.process(&mut buffer, ...);
+    
+    // Output must equal input exactly (no latency offset, no gain change)
+    assert_buffers_equal(&input, &buffer);
+}
+```
+
+### Latency Reporting Test
+
+```rust
+#[test]
+fn test_latency_reported_correctly() {
+    let mut plugin = OasisEq::default();
+    
+    // Linear phase off → zero latency
+    plugin.params().linear_phase.set_plain_value(0.0);
+    let latency_off = plugin.get_reported_latency();
+    assert_eq!(latency_off, 0);
+    
+    // Linear phase on → nonzero latency
+    plugin.params().linear_phase.set_plain_value(1.0);
+    let latency_on = plugin.get_reported_latency();
+    assert!(latency_on > 0);
 }
 ```
 
 ---
 
-## Summary: What Makes This Architecture Elegant
+## Summary: What Makes This Architecture Work
 
 ### Minimal Moving Parts
 
 1. **Two shared crates** — All reusable code lives in `oasis_core` and `oasis_ui`
-2. **One parameter system** — nih-plug params with thin extensions
+2. **One parameter system** — nih-plug params with thin extensions for common types
 3. **One communication pattern** — Atomics for scalars, ring buffers for arrays
 4. **One state model** — Parameters are the source of truth
+5. **Shared DSP building blocks** — Crossover, mid/side, filters, delay lines compose into any plugin
 
 ### Maximum Capability
 
 1. **Any DSP algorithm** — Primitives compose into anything
 2. **Any UI layout** — Vizia widgets are flexible
-3. **Any sample rate** — Everything scales correctly
-4. **Any automation rate** — Smoothing handles it
+3. **Any sample rate** — Everything scales correctly via `SampleRateContext`
+4. **Any automation rate** — Smoothing handles it (per-sample or per-block)
 
 ### Zero Surprises
 
 1. **Audio thread rules are absolute** — No exceptions, no "just this once"
-2. **Data flows one way** — Audio → UI, never the reverse
-3. **State is explicit** — A/B, undo, presets all use the same snapshot mechanism
-4. **Debug tools are built in** — Not bolted on later
+2. **Data flow is explicit** — Visualization: Audio → UI via atomics. Parameters: UI → Audio via nih-plug. Both lock-free.
+3. **State is explicit** — A/B, undo, presets all use nih-plug's serialization
+4. **Debug tools are built in** — NaN tracking, CPU profiling, signal scopes, parameter inspection — all behind feature flags
+5. **Errors are handled** — Audio thread uses defensive defaults, UI thread shows clear error messages
 
 ---
 
-*This architecture is complete. Build order: `oasis_core` → `oasis_ui` → individual plugins starting with `oasis_eq`.*
+*Build order: `oasis_core` → `oasis_ui` → individual plugins starting with `oasis_eq`.*
