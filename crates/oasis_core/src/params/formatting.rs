@@ -29,3 +29,58 @@ pub fn s2v_width() -> Arc<dyn Fn(&str) -> Option<f32> + Send + Sync> {
             .map(|v| v / 100.0)
     })
 }
+
+pub fn v2s_db() -> Arc<dyn Fn(f32) -> String + Send + Sync> {
+    Arc::new(|v| format!("{:.1} dB", v))
+}
+
+pub fn s2v_db() -> Arc<dyn Fn(&str) -> Option<f32> + Send + Sync> {
+    Arc::new(|s| {
+        s.trim()
+            .trim_end_matches(" dB")
+            .trim_end_matches("dB")
+            .trim()
+            .parse::<f32>()
+            .ok()
+    })
+}
+
+pub fn v2s_ms() -> Arc<dyn Fn(f32) -> String + Send + Sync> {
+    Arc::new(|v| format!("{:.1} ms", v))
+}
+
+pub fn s2v_ms() -> Arc<dyn Fn(&str) -> Option<f32> + Send + Sync> {
+    Arc::new(|s| {
+        s.trim()
+            .trim_end_matches(" ms")
+            .trim_end_matches("ms")
+            .trim()
+            .parse::<f32>()
+            .ok()
+    })
+}
+
+pub fn v2s_hz() -> Arc<dyn Fn(f32) -> String + Send + Sync> {
+    Arc::new(|v| {
+        if v >= 1000.0 {
+            format!("{:.2} kHz", v / 1000.0)
+        } else {
+            format!("{:.1} Hz", v)
+        }
+    })
+}
+
+pub fn s2v_hz() -> Arc<dyn Fn(&str) -> Option<f32> + Send + Sync> {
+    Arc::new(|s| {
+        let s = s.trim();
+        if let Some(khz) = s.strip_suffix("kHz").or_else(|| s.strip_suffix(" kHz")) {
+            khz.trim().parse::<f32>().ok().map(|v| v * 1000.0)
+        } else {
+            s.trim_end_matches(" Hz")
+                .trim_end_matches("Hz")
+                .trim()
+                .parse::<f32>()
+                .ok()
+        }
+    })
+}

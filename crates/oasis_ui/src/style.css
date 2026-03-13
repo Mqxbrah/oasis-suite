@@ -1,25 +1,173 @@
+/* ── Oasis Suite Global Theme ── */
+
+* {
+    font-color: #e0e0e0;
+}
+
+/* ── Main Container ── */
 .main-container {
     background-color: #121212;
     width: 1s;
     height: 1s;
-    child-space: 12px;
+}
+
+/* ── Header Bar ── */
+.header-bar {
+    width: 1s;
+    height: 40px;
+    background-color: #1a1a1a;
+    child-left: 16px;
+    child-right: 16px;
+    col-between: 8px;
+    border-bottom-width: 1px;
+    border-color: #2a2a2a;
+    layout-type: row;
+    child-top: 1s;
+    child-bottom: 1s;
+}
+
+.header-title {
+    font-size: 15;
+    color: #ffffff;
+    font-weight: bold;
+    width: auto;
+    height: auto;
+}
+
+.header-version {
+    font-size: 10;
+    color: #636366;
+    width: auto;
+    height: auto;
+    child-top: 1s;
+    child-bottom: 1s;
+}
+
+/* ── Preset Browser ── */
+.preset-browser {
+    layout-type: row;
+    width: auto;
+    height: 26px;
+    child-top: 1s;
+    child-bottom: 1s;
+    col-between: 2px;
+    left: 1s;
+}
+
+.preset-nav-btn {
+    width: 24px;
+    height: 24px;
+    background-color: #2a2a2a;
+    border-radius: 4px;
+    color: #98989d;
+    font-size: 14;
+    child-space: 1s;
+    cursor: hand;
+}
+
+.preset-nav-btn:hover {
+    background-color: #3a3a3c;
+    color: #ffffff;
+}
+
+.preset-nav-btn:active {
+    background-color: #48484a;
+}
+
+.preset-name {
+    width: 160px;
+    height: 24px;
+    background-color: #2a2a2a;
+    border-radius: 4px;
+    color: #e0e0e0;
+    font-size: 12;
+    child-space: 1s;
+    left: 2px;
+    right: 2px;
+}
+
+/* ── Content Area ── */
+.content-area {
+    width: 1s;
+    height: 1s;
+    child-space: 16px;
     row-between: 12px;
 }
 
-.plugin-title {
+/* ── Section ── */
+.section {
     width: 1s;
     height: auto;
-    font-size: 20;
-    color: #ffffff;
-    child-space: 1s;
-    text-align: center;
-    top: 8px;
-    bottom: 8px;
+    background-color: #1a1a1a;
+    border-radius: 6px;
+    child-space: 12px;
+    row-between: 6px;
 }
 
-.generic-ui {
+.section-title {
+    font-size: 10;
+    color: #636366;
+    width: 1s;
+    height: auto;
+    child-left: 0px;
+    text-transform: uppercase;
+}
+
+/* ── Parameter Rows ── */
+.param-row {
+    width: 1s;
+    height: 28px;
+    layout-type: row;
+    col-between: 8px;
+    child-top: 1s;
+    child-bottom: 1s;
+}
+
+.param-label {
+    width: 100px;
+    height: auto;
+    font-size: 12;
+    color: #98989d;
+    child-top: 1s;
+    child-bottom: 1s;
+    text-align: right;
+}
+
+.param-slider-wrap {
+    width: 1s;
+    height: 24px;
+}
+
+/* ── Columns Layout ── */
+.columns {
     width: 1s;
     height: 1s;
-    child-space: 8px;
-    row-between: 4px;
+    layout-type: row;
+    col-between: 12px;
+}
+
+.column {
+    width: 1s;
+    height: 1s;
+    row-between: 12px;
+}
+
+/* ── Footer ── */
+.footer {
+    width: 1s;
+    height: 20px;
+    layout-type: row;
+    child-left: 16px;
+    child-right: 16px;
+    border-top-width: 1px;
+    border-color: #2a2a2a;
+}
+
+.footer-text {
+    font-size: 9;
+    color: #48484a;
+    width: auto;
+    height: auto;
+    child-top: 1s;
+    child-bottom: 1s;
 }
