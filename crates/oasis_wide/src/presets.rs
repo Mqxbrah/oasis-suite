@@ -31,7 +31,7 @@ pub const FACTORY_PRESETS: &[FactoryPreset] = &[
             ("width", 0.76),       // 1.52 (152%)
             ("mid_gain", 0.4375),  // -1.5 dB
             ("side_gain", 0.679),  // 4.3 dB
-            ("haas_delay", 0.601), // 13.3 ms (skewed range 0-30)
+            ("haas_delay", 0.258), // 13.3 ms (skewed range 0-200)
             ("haas_channel", 0.0), // Right
             ("bass_mono_on", 1.0), // On
             ("bass_mono_freq", 0.069), // ~53.1 Hz (skewed)
@@ -61,7 +61,7 @@ pub const FACTORY_PRESETS: &[FactoryPreset] = &[
             ("width", 0.5),        // 100%
             ("mid_gain", 0.5),     // 0.0 dB
             ("side_gain", 0.5),    // 0.0 dB
-            ("haas_delay", 0.47),  // ~10 ms
+            ("haas_delay", 0.224), // ~10 ms (skewed range 0-200)
             ("haas_channel", 0.0), // Right
             ("bass_mono_on", 1.0), // On
             ("bass_mono_freq", 0.116), // ~80 Hz
