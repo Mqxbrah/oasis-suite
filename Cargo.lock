@@ -1965,11 +1965,51 @@ dependencies = [
 ]
 
 [[package]]
+name = "oasis_comp"
+version = "1.0.0"
+dependencies = [
+ "nih_plug",
+ "nih_plug_vizia",
+ "oasis_core",
+ "oasis_ui",
+]
+
+[[package]]
 name = "oasis_core"
 version = "1.0.0"
 dependencies = [
  "atomic_float 1.1.0",
  "nih_plug",
+]
+
+[[package]]
+name = "oasis_drive"
+version = "1.0.0"
+dependencies = [
+ "nih_plug",
+ "nih_plug_vizia",
+ "oasis_core",
+ "oasis_ui",
+]
+
+[[package]]
+name = "oasis_limit"
+version = "1.0.0"
+dependencies = [
+ "nih_plug",
+ "nih_plug_vizia",
+ "oasis_core",
+ "oasis_ui",
+]
+
+[[package]]
+name = "oasis_punch"
+version = "1.0.0"
+dependencies = [
+ "nih_plug",
+ "nih_plug_vizia",
+ "oasis_core",
+ "oasis_ui",
 ]
 
 [[package]]
