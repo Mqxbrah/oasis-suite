@@ -28,7 +28,7 @@ impl Model for Data {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum PresetAction {
     Next,
     Previous,
@@ -40,14 +40,12 @@ impl PresetBrowser {
     fn new(cx: &mut Context) -> Handle<'_, Self> {
         Self.build(cx, |cx| {
             HStack::new(cx, |cx| {
-                ArrowButton::new(cx, ArrowDirection::Left, PresetAction::Previous)
-                    .class("preset-nav-btn");
+                ArrowButton::new(cx, ArrowDirection::Left, PresetAction::Previous);
 
                 Label::new(cx, Data::preset_name)
                     .class("preset-name");
 
-                ArrowButton::new(cx, ArrowDirection::Right, PresetAction::Next)
-                    .class("preset-nav-btn");
+                ArrowButton::new(cx, ArrowDirection::Right, PresetAction::Next);
             })
             .class("preset-browser");
         })
