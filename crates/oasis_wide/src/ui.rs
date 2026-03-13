@@ -43,7 +43,7 @@ impl PresetBrowser {
                 Button::new(
                     cx,
                     |cx| cx.emit(PresetAction::Previous),
-                    |cx| { Arrow::new(cx, ArrowDirection::Left); },
+                    |cx| Arrow::new(cx, ArrowDirection::Left),
                 )
                 .class("preset-nav-btn");
 
@@ -53,7 +53,7 @@ impl PresetBrowser {
                 Button::new(
                     cx,
                     |cx| cx.emit(PresetAction::Next),
-                    |cx| { Arrow::new(cx, ArrowDirection::Right); },
+                    |cx| Arrow::new(cx, ArrowDirection::Right),
                 )
                 .class("preset-nav-btn");
             })

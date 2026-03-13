@@ -12,7 +12,7 @@ pub const BASS_MONO_MIN_FREQ: f32 = 20.0;
 pub const BASS_MONO_MAX_FREQ: f32 = 500.0;
 pub const BASS_MONO_DEFAULT_FREQ: f32 = 120.0;
 
-pub const HAAS_MAX_DELAY_MS: f32 = 30.0;
+pub const HAAS_MAX_DELAY_MS: f32 = 200.0;
 
 pub const WIDTH_MIN: f32 = 0.0;
 pub const WIDTH_MAX: f32 = 2.0;
