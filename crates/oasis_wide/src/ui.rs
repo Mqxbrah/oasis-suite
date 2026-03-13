@@ -2,7 +2,7 @@ use nih_plug::prelude::*;
 use nih_plug_vizia::vizia::prelude::*;
 use nih_plug_vizia::widgets::*;
 use nih_plug_vizia::{assets, create_vizia_editor, ViziaTheming};
-use oasis_ui::{Arrow, ArrowDirection, ParamKnob};
+use oasis_ui::{ArrowButton, ArrowDirection, ParamKnob};
 use std::sync::Arc;
 
 use crate::params::OasisWideParams;
@@ -40,22 +40,14 @@ impl PresetBrowser {
     fn new(cx: &mut Context) -> Handle<'_, Self> {
         Self.build(cx, |cx| {
             HStack::new(cx, |cx| {
-                Button::new(
-                    cx,
-                    |cx| cx.emit(PresetAction::Previous),
-                    |cx| Arrow::new(cx, ArrowDirection::Left),
-                )
-                .class("preset-nav-btn");
+                ArrowButton::new(cx, ArrowDirection::Left, PresetAction::Previous)
+                    .class("preset-nav-btn");
 
                 Label::new(cx, Data::preset_name)
                     .class("preset-name");
 
-                Button::new(
-                    cx,
-                    |cx| cx.emit(PresetAction::Next),
-                    |cx| Arrow::new(cx, ArrowDirection::Right),
-                )
-                .class("preset-nav-btn");
+                ArrowButton::new(cx, ArrowDirection::Right, PresetAction::Next)
+                    .class("preset-nav-btn");
             })
             .class("preset-browser");
         })

@@ -54,35 +54,22 @@
     left: 1s;
 }
 
-.preset-nav-btn {
+arrow-btn {
     width: 24px;
     height: 24px;
     background-color: #2a2a2a;
-    border-width: 0px;
-    border-color: transparent;
     border-radius: 4px;
     color: #98989d;
-    child-space: 0px;
     cursor: hand;
 }
 
-.preset-nav-btn:hover {
+arrow-btn:hover {
     background-color: #3a3a3c;
     color: #ffffff;
 }
 
-.preset-nav-btn:active {
+arrow-btn:active {
     background-color: #48484a;
-}
-
-arrow-icon {
-    width: 24px;
-    height: 24px;
-    color: #98989d;
-}
-
-arrow-icon:hover {
-    color: #ffffff;
 }
 
 .preset-name {
