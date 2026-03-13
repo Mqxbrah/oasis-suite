@@ -50,8 +50,7 @@ impl<E: 'static + Clone + Send + std::fmt::Debug> View for ArrowButton<E> {
 
         if bg.a > 0.01 {
             let mut path = vg::Path::new();
-            let r = cx.border_radius_bottom_left();
-            path.rounded_rect(bounds.x, bounds.y, bounds.w, bounds.h, r);
+            path.rounded_rect(bounds.x, bounds.y, bounds.w, bounds.h, 4.0);
             canvas.fill_path(&path, &vg::Paint::color(bg));
         }
 
