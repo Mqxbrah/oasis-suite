@@ -7,19 +7,34 @@ pub enum ArrowDirection {
     Right,
 }
 
-pub struct Arrow {
+/// A clickable arrow button that draws a filled triangle.
+/// Emits a configurable event on click.
+pub struct ArrowButton<E: 'static + Clone + Send> {
     direction: ArrowDirection,
+    on_click: E,
 }
 
-impl Arrow {
-    pub fn new(cx: &mut Context, direction: ArrowDirection) -> Handle<'_, Self> {
-        Self { direction }.build(cx, |_| {})
+impl<E: 'static + Clone + Send> ArrowButton<E> {
+    pub fn new(cx: &mut Context, direction: ArrowDirection, on_click: E) -> Handle<'_, Self>
+    where
+        E: std::fmt::Debug,
+    {
+        Self { direction, on_click }.build(cx, |_| {})
     }
 }
 
-impl View for Arrow {
+impl<E: 'static + Clone + Send + std::fmt::Debug> View for ArrowButton<E> {
     fn element(&self) -> Option<&'static str> {
-        Some("arrow-icon")
+        Some("arrow-btn")
+    }
+
+    fn event(&mut self, cx: &mut EventContext, event: &mut Event) {
+        event.map(|window_event, meta| {
+            if let WindowEvent::MouseDown(MouseButton::Left) = *window_event {
+                cx.emit(self.on_click.clone());
+                meta.consume();
+            }
+        });
     }
 
     fn draw(&self, cx: &mut DrawContext, canvas: &mut Canvas) {
@@ -28,36 +43,45 @@ impl View for Arrow {
             return;
         }
 
-        let w = bounds.w;
-        let h = bounds.h;
-        let center_x = bounds.x + w * 0.5;
-        let center_y = bounds.y + h * 0.5;
+        // Background
+        let bg_color = cx.background_color();
+        let mut bg: vg::Color = bg_color.into();
+        bg.set_alphaf(bg.a * cx.opacity());
 
-        let tri_w = w * 0.3;
-        let tri_h = h * 0.3;
+        if bg.a > 0.01 {
+            let mut path = vg::Path::new();
+            let r = cx.border_radius_bottom_left();
+            path.rounded_rect(bounds.x, bounds.y, bounds.w, bounds.h, r);
+            canvas.fill_path(&path, &vg::Paint::color(bg));
+        }
+
+        // Triangle
+        let center_x = bounds.x + bounds.w * 0.5;
+        let center_y = bounds.y + bounds.h * 0.5;
+        let tri_w = bounds.w * 0.28;
+        let tri_h = bounds.h * 0.28;
 
         let mut path = vg::Path::new();
         match self.direction {
             ArrowDirection::Left => {
-                path.move_to(center_x - tri_w * 0.5, center_y);
-                path.line_to(center_x + tri_w * 0.5, center_y - tri_h);
-                path.line_to(center_x + tri_w * 0.5, center_y + tri_h);
+                path.move_to(center_x - tri_w, center_y);
+                path.line_to(center_x + tri_w, center_y - tri_h);
+                path.line_to(center_x + tri_w, center_y + tri_h);
             }
             ArrowDirection::Right => {
-                path.move_to(center_x + tri_w * 0.5, center_y);
-                path.line_to(center_x - tri_w * 0.5, center_y - tri_h);
-                path.line_to(center_x - tri_w * 0.5, center_y + tri_h);
+                path.move_to(center_x + tri_w, center_y);
+                path.line_to(center_x - tri_w, center_y - tri_h);
+                path.line_to(center_x - tri_w, center_y + tri_h);
             }
         }
         path.close();
 
-        let color: vg::Color = cx.font_color().into();
-        // Fall back to a visible gray if font_color comes back as fully transparent
-        let paint = if color.a < 0.01 {
-            vg::Paint::color(vg::Color::rgb(152, 152, 157))
+        let fg: vg::Color = cx.font_color().into();
+        let color = if fg.a < 0.01 {
+            vg::Color::rgb(152, 152, 157)
         } else {
-            vg::Paint::color(color)
+            fg
         };
-        canvas.fill_path(&path, &paint);
+        canvas.fill_path(&path, &vg::Paint::color(color));
     }
 }
