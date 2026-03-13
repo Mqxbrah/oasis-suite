@@ -2,7 +2,7 @@ use nih_plug::prelude::*;
 use nih_plug_vizia::vizia::prelude::*;
 use nih_plug_vizia::widgets::*;
 use nih_plug_vizia::{assets, create_vizia_editor, ViziaTheming};
-use oasis_ui::{ArrowButton, ArrowDirection, ParamKnob};
+use oasis_ui::{ArrowButton, ArrowDirection, DropdownOverlay, ParamKnob};
 use std::sync::Arc;
 
 use crate::params::OasisWideParams;
@@ -97,21 +97,16 @@ impl PresetBrowser {
                         .class("preset-name")
                         .on_press(|cx| cx.emit(DataEvent::TogglePresetList));
 
-                    Popup::new(cx, Data::show_preset_list, false, |cx| {
-                        VStack::new(cx, |cx| {
-                            for (i, preset) in presets::FACTORY_PRESETS.iter().enumerate() {
-                                let idx = i;
-                                Label::new(cx, preset.name)
-                                    .class("preset-list-item")
-                                    .on_press(move |cx| {
-                                        cx.emit(PresetAction::Select(idx));
-                                    });
-                            }
-                        })
-                        .class("preset-dropdown");
-                    })
-                    .on_blur(|cx| cx.emit(DataEvent::ClosePresetList))
-                    .class("preset-popup-wrapper");
+                    DropdownOverlay::new(cx, Data::show_preset_list, |cx| {
+                        for (i, preset) in presets::FACTORY_PRESETS.iter().enumerate() {
+                            let idx = i;
+                            Label::new(cx, preset.name)
+                                .class("preset-list-item")
+                                .on_press(move |cx| {
+                                    cx.emit(PresetAction::Select(idx));
+                                });
+                        }
+                    });
                 })
                 .class("preset-name-container");
 

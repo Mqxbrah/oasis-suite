@@ -94,36 +94,19 @@ arrow-btn:active {
     background-color: #3a3a3c;
 }
 
-.preset-popup-wrapper {
+dropdown-overlay {
+    position-type: self-directed;
+    z-index: 200;
     width: 160px;
     height: auto;
-    top: 28px;
+    top: 30px;
     left: 0px;
-    background-color: #252528;
-    border-radius: 6px;
-    border-width: 1px;
-    border-color: #4a4a4c;
-    outer-shadow: 0 4 16 #000000cc;
-}
-
-popup.preset-popup-wrapper {
-    width: 160px;
-    height: auto;
-    top: 28px;
-    left: 0px;
-    background-color: #252528;
-    border-radius: 6px;
-    border-width: 1px;
-    border-color: #4a4a4c;
-    outer-shadow: 0 4 16 #000000cc;
-}
-
-.preset-dropdown {
-    background-color: #252528;
-    border-radius: 6px;
-    width: 160px;
     child-space: 4px;
     row-between: 0px;
+}
+
+dropdown-overlay:not(.dropdown-visible) {
+    display: none;
 }
 
 .preset-list-item {
