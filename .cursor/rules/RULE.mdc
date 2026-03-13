@@ -1,0 +1,42 @@
+---
+alwaysApply: true
+---
+FIRST, YOU MUST READ THE FOLLOWING FILES IN THEIR ENTIRETY IF THEY EXIST, NO MATTER WHAT (UNLESS I SAY "SKIP DOCS, or something similar")
+
+I'M GOING TO SAY IT AGAIN, YOU MUST READ THE FOLLOWING FILES IN THEIR ENTIRETY IF THEY EXIST, NO MATTER WHAT
+
+.cursor/rules/WORKFLOW.md
+- Logistical Process of exactly how to go about adding in all types of content into the game to work with all game systems, basically a streamlined version of architecture
+
+.cursor/rules/IDEA.md
+- My initial briefing on the project end goal
+
+.cursor/rules/MISTAKES.md
+- Contains common mistakes that will be added to throughout the project
+
+.cursor/rules/MINDSET.md
+- Mindset, Vision and work habits that you should have towards the project
+
+
+NEXT, READ THE ENTIREY OF ANY THESE THAT YOU BELIEVE ARE RELEVANT BASED ON YOUR ASSIGNED TASK: 
+
+.cursor/rules/SYNOPSIS.md
+- Should be read before any task that isn’t purely technical
+
+.cursor/rules/MAYBE.md
+- Should be read only if you are prompted to suggest ideas for the game (gameplay mechanics, story, dialogue, puzzles, etc)
+
+.cursor/rules/ARCHITECTURE.md
+- Should be read during all inital planning and building of systems, any later expansion of architecture and when making changes to workflow to keep it updated
+
+THEN, IF THERE WAS WORK DONE BEFORE THIS PROMPT:
+
+NEVER EVER CREATE AN ADDITIONAL NPM NODE ALWAYS USE PORT 3000, ALSO NEVER TRY TO TEST THE PROGRAM IN THE CURSOR BROWSER YOURSELF, TESTING IS FOR ME TO DO
+
+Go over what you did and make sure it’s right and if it should have more care put into it (ONLY Check browser to spot build errors that the linter missed), don’t use browser ANYTHING ELSE, no play testing, not reviewing textures, models or assets. You can use terminal to run build commands since ive allowed it, but you should refrain from anything that requires admin permission other than that since I wont be here to click allow in cursor.
+
+THEN:
+
+MAKE SURE NOTHING IN THE .CURSOR/RULES/RULE DOCUMENTATION FILES IS INCORRECT OR A WASTE OF CONTEXT DUE TO A LARGE AMOUNT OF UNNECCESARY DUPLICATION OR CONTRADICTORY COMPARED TO OTHER DOCUMENTATION, IF THERE IS ANYTHING, BRING IT TO MY ATTENTION
+
+IF YOU THINK SOMETHING IS OUTDATED IN THIS RULE.mdc FILE, LET ME KNOW, DON'T EDIT RULE.mdc or MISTAKES.md WITHOUT MY INSTRUCTION
