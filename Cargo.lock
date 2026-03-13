@@ -1983,6 +1983,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "oasis_deess"
+version = "1.0.0"
+dependencies = [
+ "nih_plug",
+ "nih_plug_vizia",
+ "oasis_core",
+ "oasis_ui",
+]
+
+[[package]]
+name = "oasis_delay"
+version = "1.0.0"
+dependencies = [
+ "nih_plug",
+ "nih_plug_vizia",
+ "oasis_core",
+ "oasis_ui",
+]
+
+[[package]]
 name = "oasis_drive"
 version = "1.0.0"
 dependencies = [
@@ -2018,6 +2038,16 @@ version = "1.0.0"
 dependencies = [
  "nih_plug",
  "nih_plug_vizia",
+]
+
+[[package]]
+name = "oasis_verb"
+version = "1.0.0"
+dependencies = [
+ "nih_plug",
+ "nih_plug_vizia",
+ "oasis_core",
+ "oasis_ui",
 ]
 
 [[package]]
