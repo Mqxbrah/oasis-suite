@@ -1,6 +1,6 @@
 # Oasis Suite — Architecture
 
-This document defines the complete architecture for the Oasis Suite VST3/CLAP plugin collection. Every system is designed for **minimal complexity, maximum capability** — only as complex as necessary, but robust enough to handle anything we throw at it.
+This document defines the complete architecture for the Oasis Suite VST3 plugin collection. Every system is designed for **minimal complexity, maximum capability** — only as complex as necessary, but robust enough to handle anything we throw at it.
 
 ---
 
@@ -71,6 +71,8 @@ oasis-suite/
 │   │       │   ├── pitch.rs        # Pitch shifting, formants
 │   │       │   ├── fft.rs          # Real FFT for analysis
 │   │       │   ├── oversampler.rs  # Polyphase up/downsampling
+│   │       │   ├── crossover.rs    # Linkwitz-Riley multi-band crossover
+│   │       │   ├── mid_side.rs     # Mid/side encode/decode
 │   │       │   └── simd.rs         # SIMD abstractions
 │   │       ├── params/             # Parameter system extensions
 │   │       │   ├── mod.rs
@@ -140,7 +142,10 @@ oasis-suite/
 └── tests/                          # Integration tests
     ├── audio_thread_safety.rs
     ├── preset_compatibility.rs
-    └── parameter_automation.rs
+    ├── parameter_automation.rs
+    ├── signal_integrity.rs
+    ├── bypass.rs
+    └── latency.rs
 ```
 
 ### Why This Structure
@@ -170,7 +175,7 @@ build:
 release:
 	cargo build --workspace --release
 
-# Bundle all plugins into .vst3 and .clap
+# Bundle all plugins into .vst3
 bundle:
 	cargo xtask bundle --release
 
