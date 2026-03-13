@@ -116,8 +116,8 @@ impl ClapPlugin for OasisLimit {
     const CLAP_SUPPORT_URL: Option<&'static str> = None;
     const CLAP_FEATURES: &'static [ClapFeature] = &[
         ClapFeature::AudioEffect,
-        ClapFeature::Limiter,
-        ClapFeature::Dynamics,
+        ClapFeature::Custom("Limiter"),
+        ClapFeature::Custom("Dynamics"),
     ];
 }
 
