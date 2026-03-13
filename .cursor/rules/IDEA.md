@@ -2,12 +2,137 @@
 
 A professional VST3 plugin suite built from scratch. No JUCE, no frameworks — pure VST3 SDK and custom code.
 
-## Technical Constraints
+---
 
-- **VST3 SDK only** — no JUCE, no external frameworks
-- **No Xcode dependency** — build system should work from command line
-- **Cross-platform** — macOS and Windows support
-- **Consistent UI** — shared visual language across all plugins
+## Constraints
+
+### Technical
+
+**Framework**
+- VST3 SDK only — no JUCE, no FAUST, no external frameworks
+- No Xcode dependency — command-line build system only
+- Cross-platform codebase (macOS + Windows), but **focus on macOS first**
+- Test primarily in **FL Studio** during development
+
+**Binary**
+- Single .vst3 file per plugin — no installers, no external data files
+- All assets baked in: code, factory presets, graphics, fonts, everything
+- Target file size: keep each plugin under ~10-20MB if possible
+
+**Audio Thread**
+- Zero allocations on audio thread
+- No blocking operations (locks, I/O, system calls)
+- Denormal protection on all DSP
+- All parameter changes smoothed to prevent clicks/pops
+
+**Performance**
+- Target: <1% CPU on modern machine at 44.1kHz/512 buffer for simple plugins
+- Oversampling should be optional (trade quality for CPU)
+- UI rendering independent of audio thread (never block audio for graphics)
+
+**Sample Rates**
+- Support 44.1, 48, 88.2, 96, 176.4, 192 kHz minimum
+- Handle sample rate changes without crashing or glitching
+
+---
+
+### Visual / UI
+
+**Graphics**
+- **All UI is vector graphics generated in code** — no external image files, no design tools
+- Everything drawn programmatically: knobs, buttons, meters, backgrounds, all of it
+- UI must remain crisp at all scales (vector = infinite resolution)
+
+**Scaling**
+- Resizable: 50% to 200%
+- Default size should be comfortable on 1080p and 4K monitors
+
+**Typography**
+- One font family (maybe two: display + UI)
+- Baked into binary (no system font dependencies)
+- Readable at small sizes for parameter values
+
+**Animation**
+- **120fps target** for meters and visualizations
+- Smooth but not excessive (don't distract from music making)
+- No animation on parameter changes (instant visual feedback preferred)
+
+**Consistency**
+- Same visual language across all plugins
+- If you learn one Oasis plugin, you know them all
+
+---
+
+### Artistic
+
+**Identity**
+- Decide on ONE visual direction and commit (minimal? vintage? futuristic? organic?)
+- No mixing styles — if it's clean and modern, it's clean and modern everywhere
+- Avoid generic "stock plugin" look — have a point of view
+
+**Sound Character**
+- Plugins should sound professional and usable in any genre
+- If adding "character" modes, the default should be clean/transparent
+- Never sacrifice audio quality for visual appeal
+
+**Preset Philosophy**
+- Factory presets should be immediately usable, not extreme demos
+- Init preset = sensible starting point, not zeroed out
+- Preset names should be descriptive (not "Preset 37" or "Cool Vibe 2")
+
+---
+
+### Workflow
+
+**Interaction**
+- Double-click = reset to default (no exceptions)
+- Right-click = context menu (no exceptions)
+- Shift+drag = fine adjust (no exceptions)
+- These must work identically in every plugin
+
+**Presets**
+- .oasis format only for user presets
+- Must validate plugin type on load (no silent failures)
+- Presets must be forward-compatible (old presets work in new versions)
+
+**State**
+- Full recall with DAW session
+- A/B comparison on every plugin
+- Undo/redo on every plugin
+
+---
+
+### Scope
+
+**What Oasis Suite IS**
+- Professional mixing/mastering/production tools
+- Clean, reliable, performant
+- A cohesive suite that works together
+
+**What Oasis Suite IS NOT**
+- Not experimental/glitch/lo-fi focused (though it can do those things)
+- Not trying to emulate specific hardware (no "Neve-style" or "LA-2A clone" language)
+- Not a kitchen-sink plugin (each plugin does one thing well)
+
+---
+
+### Development
+
+**Code Quality**
+- No magic numbers — all values in constants/config
+- No "temporary" hacks — do it right or don't do it
+- Comments explain WHY, not WHAT
+- Consistent naming conventions across entire codebase
+
+**Testing**
+- Every plugin tested at multiple sample rates and buffer sizes
+- Automation stress test (rapid parameter changes)
+- Edge cases: bypass, 0% mix, 100% mix, extreme settings
+
+**Versioning**
+- All plugins start at 1.0
+- Version changes only when project owner decides
+- Backward compatibility is mandatory
 
 ---
 
