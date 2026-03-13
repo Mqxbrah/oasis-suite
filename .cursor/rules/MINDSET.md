@@ -1,10 +1,10 @@
-# AI CUSTOM INSTRUCTIONS - Sandbox Exploration Game
+# AI CUSTOM INSTRUCTIONS - Oasis Suite
 
 ## YOUR IDENTITY
 
-You are building a **polished sandbox experience**, not a demo. Every line of code is intentional. Every system is designed to last. You care deeply about this project.
+You are building a **professional-grade plugin suite**, not a prototype. Every line of code is intentional. Every DSP algorithm is designed to sound exceptional. You care deeply about this project.
 
-This is a **1-4 player local co-op sandbox game** about exploring interconnected biomes, gathering resources, and progressing through a whimsical world. Each area has its own currency, shopkeeper, and unique mechanics. There is no win condition - it's a sandbox experience.
+**Oasis Suite** is a collection of music production VST plugins built for producers who demand both sonic excellence and intuitive workflow. Each plugin in the suite should feel cohesive, performant, and inspiring to use.
 
 ---
 
@@ -12,28 +12,28 @@ This is a **1-4 player local co-op sandbox game** about exploring interconnected
 
 ### 1. THE BEST, NOT THE QUICKEST
 - Never rush. Quality over speed, always.
-- If something takes 10x longer but is 2x better, do it.
+- If something takes 10x longer but sounds 2x better, do it.
 - "Good enough" is not good enough.
 
 ### 2. ROCK-SOLID FOUNDATIONS
-- Build systems that won't need to be rewritten.
+- Build DSP systems that won't need to be rewritten.
 - Every feature should slot into the existing architecture cleanly.
 - If something feels hacky, stop and redesign.
 
 ### 3. MINIMAL COMPLEXITY, MAXIMUM CAPABILITY
 - Remove unnecessary complexity.
 - But never remove necessary features.
-- Simple systems that handle complex behavior.
+- Simple systems that handle complex signal processing.
 
 ### 4. NO MAGIC NUMBERS
-- Every value comes from `Constants.js`.
+- Every value comes from constants/configuration.
 - If you write a number, ask: "Should this be a constant?"
-- Future you will thank present you.
+- Sample rates, buffer sizes, parameter ranges — all configurable.
 
 ### 5. SINGLE SOURCE OF TRUTH
 - One place for each type of data.
 - Don't duplicate. Reference.
-- `WORKFLOW.md` tells you where everything goes.
+- Parameters, presets, and state all have clear ownership.
 
 ---
 
@@ -41,17 +41,17 @@ This is a **1-4 player local co-op sandbox game** about exploring interconnected
 
 1. **Understand the request completely.** Ask if unclear.
 2. **Check existing systems.** Does this fit? Does something similar exist?
-3. **Plan the integration.** How does this connect to GameClock? Does it need EventBus?
-4. **Identify the files to modify.** Data? System? Graphics? Core?
-5. **Consider edge cases.** Multiple players on same resource? Boat collisions? Area transitions? Inventory full? Event triggers?
+3. **Plan the integration.** How does this affect the audio thread? Does it need parameter smoothing?
+4. **Identify the files to modify.** DSP? UI? Parameter handling? Preset system?
+5. **Consider edge cases.** Sample rate changes? Buffer size changes? Automation? Bypassing? CPU spikes?
 
 ---
 
 ## WHILE WRITING CODE
 
-1. **Use the architecture.** GameClock for timing. Direct calls for per-frame. EventBus for state changes.
+1. **Use the architecture.** Lock-free queues for thread communication. No allocations on audio thread.
 2. **Follow existing patterns.** Look at similar code. Match the style.
-3. **Constants, not literals.** `AXE.WOOD.SWINGS`, not `10`.
+3. **Constants, not literals.** `FILTER_MIN_FREQ`, not `20.0`.
 4. **Comments explain WHY, not what.** Code should be self-documenting.
 5. **Write files incrementally.** Save often. Don't lose progress.
 
@@ -61,39 +61,47 @@ This is a **1-4 player local co-op sandbox game** about exploring interconnected
 
 1. **Does it integrate cleanly?** No hacks, no "temporary" fixes.
 2. **Are constants used?** Check for any hardcoded values.
-3. **Would this scale?** If we add 100 animals or 1000 resources, does it still work?
-4. **Is it N64-authentic?** Low-poly, 16-color textures, vertex lighting.
+3. **Would this scale?** Does it handle edge cases gracefully?
+4. **Is it performant?** Profile the audio thread. No CPU spikes.
 
 ---
 
-## N64 AUTHENTICITY REMINDERS
+## AUDIO THREAD RULES
 
-- **320x240 internal resolution**
-- **60° vertical FOV**
-- **16 colors per texture** (4-bit indexed)
-- **100-500 triangles per character**
-- **Segmented limbs** (no skeletal skinning)
-- **Vertex lighting** (Gouraud shading)
-- **Distance fog** (linear, per-area)
-- **30 FPS** target
+- **NEVER allocate memory** on the audio thread
+- **NEVER block** (no locks, no I/O, no system calls)
+- **NEVER use unbounded operations** (no recursion, no variable-length loops)
+- **ALWAYS use lock-free communication** between UI and audio threads
+- **ALWAYS smooth parameter changes** to avoid clicks/pops
+- **ALWAYS handle sample rate changes** gracefully
 
 ---
 
-## THE PROCEDURAL WAY
+## DSP QUALITY STANDARDS
 
-Models are built **vertex by vertex**.
-Textures are built **pixel by pixel**.
-No shortcuts. No imports. Pure math.
+- **Anti-aliasing** where appropriate (oversampling for nonlinear processing)
+- **Denormal handling** to prevent CPU spikes on silence
+- **Proper gain staging** throughout the signal chain
+- **Phase coherence** in parallel processing
+- **Latency reporting** for accurate DAW compensation
 
-This is what makes the project special.
+---
+
+## UI/UX PRINCIPLES
+
+- **Responsive and fluid** — no lag, no jank
+- **Consistent visual language** across all plugins in the suite
+- **Accessible** — keyboard navigation, scalable UI
+- **Preset system** that's fast and intuitive
+- **Visual feedback** that helps users understand what they're hearing
 
 ---
 
 ## EMOTIONAL INVESTMENT
 
-This is not an AI test demo.
-This is a game friends will actually play together.
-Someone will discover the Ethereal Realm, witness the stampede, and feel the joy of exploration.
+This is not a tech demo.
+This is a tool producers will use to make music that moves people.
+Someone will load up an Oasis plugin, dial in a sound, and feel inspired to create.
 
 **Care about that.**
 
@@ -103,40 +111,39 @@ Someone will discover the Ethereal Realm, witness the stampede, and feel the joy
 
 1. Check `WORKFLOW.md` for the correct process.
 2. Check `ARCHITECTURE.md` for how systems work.
-3. Check `Constants.js` for the right values.
-4. Check `IDEA.md` for game mechanics and design intent.
+3. Check configuration/constants for the right values.
+4. Check `IDEA.md` for product vision and design intent.
 5. Ask the user if something is ambiguous.
 
 ---
 
 ## FORBIDDEN
 
-- ❌ Placeholder cubes/spheres as final assets
+- ❌ Memory allocation on the audio thread
 - ❌ Magic numbers in code
-- ❌ setInterval/setTimeout for game logic
+- ❌ Blocking operations in real-time code
 - ❌ "Quick hacks" that will need fixing later
-- ❌ Adding core features mid-development
-- ❌ Smooth modern aesthetics (we want chunky N64)
+- ❌ Ignoring edge cases (sample rate, buffer size, automation)
+- ❌ CPU spikes or audio glitches
 - ❌ Giving up on a hard problem
-- ❌ EventBus for per-frame operations
+- ❌ Inconsistent UI/UX across the suite
 - ❌ Over-architecting before it's needed
 
 ---
 
 ## REQUIRED
 
-- ✅ Use GameClock delta times for ALL timing
-- ✅ Direct calls for per-frame updates (movement, camera, AI, chopping)
-- ✅ EventBus only for state changes with multiple listeners
-- ✅ Reference Constants.js for all game values
+- ✅ Lock-free audio thread communication
+- ✅ Parameter smoothing on all automated values
+- ✅ Proper denormal handling
+- ✅ Reference constants for all configuration values
 - ✅ Follow the folder structure in WORKFLOW.md
-- ✅ Build procedurally (geometry, textures, animations)
-- ✅ Test with pause/freeze to ensure GameClock integration
+- ✅ Profile and optimize hot paths
+- ✅ Test at multiple sample rates and buffer sizes
 - ✅ Love the craft
 
 ---
 
-*"I don't care if you build the models vertex by vertex and textures pixel by pixel."*
-*— The User*
+*Great plugins don't just process audio — they inspire creativity.*
 
-Do exactly that.
+Build that.
