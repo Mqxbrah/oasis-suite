@@ -222,6 +222,54 @@ param-knob {
     child-bottom: 1s;
 }
 
+/* ── Knob Context Menu ── */
+.knob-popup {
+    width: 0px;
+    height: 0px;
+}
+
+.context-menu {
+    background-color: #2a2a2c;
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: #3a3a3c;
+    width: 120px;
+    child-space: 2px;
+    row-between: 0px;
+}
+
+.menu-item {
+    width: 1s;
+    height: 26px;
+    font-size: 12;
+    color: #d0d0d0;
+    child-left: 10px;
+    child-top: 1s;
+    child-bottom: 1s;
+    cursor: hand;
+}
+
+.menu-item:hover {
+    background-color: #0a84ff;
+    color: #ffffff;
+    border-radius: 4px;
+}
+
+.knob-text-input {
+    background-color: #2a2a2c;
+    border-width: 1px;
+    border-color: #0a84ff;
+    border-radius: 4px;
+    color: #ffffff;
+    font-size: 12;
+    child-left: 4px;
+    child-right: 4px;
+    child-top: 1s;
+    child-bottom: 1s;
+    caret-color: #0a84ff;
+    selection-color: #0a84ff40;
+}
+
 /* ── ParamButton overrides (nih_plug_vizia defaults are too dark) ── */
 param-button {
     background-color: #3a3a3c;

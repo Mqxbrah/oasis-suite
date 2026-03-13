@@ -17,6 +17,9 @@ pub struct ParamKnob {
     drag_start_y: f32,
     drag_start_value: f32,
     bipolar: bool,
+
+    show_menu: bool,
+    text_editing: bool,
 }
 
 enum KnobEvent {
@@ -24,6 +27,13 @@ enum KnobEvent {
     DragMove(f32, bool),
     DragEnd,
     ResetToDefault,
+    OpenMenu,
+    CloseMenu,
+    MenuEditValue,
+    MenuCopy,
+    MenuPaste,
+    TextSubmit(String),
+    TextCancel,
 }
 
 impl ParamKnob {
@@ -50,8 +60,67 @@ impl ParamKnob {
             drag_start_y: 0.0,
             drag_start_value: 0.0,
             bipolar,
+            show_menu: false,
+            text_editing: false,
         }
-        .build(cx, |_| {})
+        .build(cx, move |cx| {
+            // Text input overlay (shown when editing value)
+            Binding::new(cx, ParamKnob::text_editing, move |cx, editing| {
+                if editing.get(cx) {
+                    let display_lens = params.clone().map(move |p| {
+                        let param = params_to_param(p);
+                        param.normalized_value_to_string(
+                            param.unmodulated_normalized_value(),
+                            true,
+                        )
+                    });
+
+                    Textbox::new(cx, display_lens)
+                        .class("knob-text-input")
+                        .on_submit(|cx, val, success| {
+                            if success {
+                                cx.emit(KnobEvent::TextSubmit(val));
+                            } else {
+                                cx.emit(KnobEvent::TextCancel);
+                            }
+                        })
+                        .on_cancel(|cx| cx.emit(KnobEvent::TextCancel))
+                        .on_build(|cx| {
+                            cx.emit(TextEvent::StartEdit);
+                            cx.emit(TextEvent::SelectAll);
+                        })
+                        .position_type(PositionType::SelfDirected)
+                        .width(Pixels(80.0))
+                        .height(Pixels(20.0))
+                        .left(Stretch(1.0))
+                        .right(Stretch(1.0))
+                        .top(Stretch(1.0))
+                        .bottom(Stretch(1.0))
+                        .z_index(200);
+                }
+            });
+
+            // Context menu popup
+            Popup::new(cx, ParamKnob::show_menu, false, |cx| {
+                VStack::new(cx, |cx| {
+                    Label::new(cx, "Edit Value")
+                        .class("menu-item")
+                        .on_press(|cx| cx.emit(KnobEvent::MenuEditValue));
+                    Label::new(cx, "Copy")
+                        .class("menu-item")
+                        .on_press(|cx| cx.emit(KnobEvent::MenuCopy));
+                    Label::new(cx, "Paste")
+                        .class("menu-item")
+                        .on_press(|cx| cx.emit(KnobEvent::MenuPaste));
+                    Label::new(cx, "Reset")
+                        .class("menu-item")
+                        .on_press(|cx| cx.emit(KnobEvent::ResetToDefault));
+                })
+                .class("context-menu");
+            })
+            .on_blur(|cx| cx.emit(KnobEvent::CloseMenu))
+            .class("knob-popup");
+        })
     }
 }
 
@@ -63,6 +132,9 @@ impl View for ParamKnob {
     fn event(&mut self, cx: &mut EventContext, event: &mut Event) {
         event.map(|window_event, meta| match *window_event {
             WindowEvent::MouseDown(MouseButton::Left) => {
+                if self.show_menu || self.text_editing {
+                    return;
+                }
                 if cx.modifiers().alt() {
                     cx.emit(KnobEvent::ResetToDefault);
                 } else {
@@ -72,6 +144,9 @@ impl View for ParamKnob {
                 meta.consume();
             }
             WindowEvent::MouseDoubleClick(MouseButton::Left) => {
+                if self.show_menu || self.text_editing {
+                    return;
+                }
                 cx.emit(KnobEvent::ResetToDefault);
                 meta.consume();
             }
@@ -86,6 +161,10 @@ impl View for ParamKnob {
                     let fine = cx.modifiers().shift();
                     cx.emit(KnobEvent::DragMove(y, fine));
                 }
+            }
+            WindowEvent::MouseDown(MouseButton::Right) => {
+                cx.emit(KnobEvent::OpenMenu);
+                meta.consume();
             }
             _ => {}
         });
@@ -116,10 +195,60 @@ impl View for ParamKnob {
                 cx.emit(RawParamEvent::EndSetParameter(self.param_ptr));
             }
             KnobEvent::ResetToDefault => {
+                self.show_menu = false;
                 let default = unsafe { self.param_ptr.default_normalized_value() };
                 cx.emit(RawParamEvent::BeginSetParameter(self.param_ptr));
                 cx.emit(RawParamEvent::SetParameterNormalized(self.param_ptr, default));
                 cx.emit(RawParamEvent::EndSetParameter(self.param_ptr));
+                cx.needs_redraw();
+            }
+            KnobEvent::OpenMenu => {
+                self.show_menu = true;
+                cx.needs_redraw();
+            }
+            KnobEvent::CloseMenu => {
+                self.show_menu = false;
+                cx.needs_redraw();
+            }
+            KnobEvent::MenuEditValue => {
+                self.show_menu = false;
+                self.text_editing = true;
+                cx.needs_redraw();
+            }
+            KnobEvent::MenuCopy => {
+                self.show_menu = false;
+                let value_str = unsafe {
+                    self.param_ptr.normalized_value_to_string(
+                        self.param_ptr.unmodulated_normalized_value(),
+                        true,
+                    )
+                };
+                let _ = cx.set_clipboard(value_str);
+                cx.needs_redraw();
+            }
+            KnobEvent::MenuPaste => {
+                self.show_menu = false;
+                if let Ok(text) = cx.get_clipboard() {
+                    if let Some(norm) = unsafe { self.param_ptr.string_to_normalized_value(&text) } {
+                        cx.emit(RawParamEvent::BeginSetParameter(self.param_ptr));
+                        cx.emit(RawParamEvent::SetParameterNormalized(self.param_ptr, norm));
+                        cx.emit(RawParamEvent::EndSetParameter(self.param_ptr));
+                    }
+                }
+                cx.needs_redraw();
+            }
+            KnobEvent::TextSubmit(text) => {
+                self.text_editing = false;
+                if let Some(norm) = unsafe { self.param_ptr.string_to_normalized_value(text) } {
+                    cx.emit(RawParamEvent::BeginSetParameter(self.param_ptr));
+                    cx.emit(RawParamEvent::SetParameterNormalized(self.param_ptr, norm));
+                    cx.emit(RawParamEvent::EndSetParameter(self.param_ptr));
+                }
+                cx.needs_redraw();
+            }
+            KnobEvent::TextCancel => {
+                self.text_editing = false;
+                cx.needs_redraw();
             }
         });
     }
@@ -140,7 +269,7 @@ impl View for ParamKnob {
         let normalized = unsafe { self.param_ptr.unmodulated_normalized_value() };
         let value_angle = ARC_START + normalized * (ARC_END - ARC_START);
 
-        // Track arc (dark background)
+        // Track arc
         let mut path = vg::Path::new();
         path.arc(center_x, center_y, radius, ARC_START, ARC_END, vg::Solidity::Hole);
         let mut paint = vg::Paint::color(vg::Color::rgba(255, 255, 255, 25));
@@ -173,7 +302,7 @@ impl View for ParamKnob {
             canvas.stroke_path(&path, &paint);
         }
 
-        // Indicator dot at current position
+        // Indicator dot
         let dot_x = center_x + radius * value_angle.cos();
         let dot_y = center_y + radius * value_angle.sin();
         let dot_radius = (size * 0.05).max(2.0);
