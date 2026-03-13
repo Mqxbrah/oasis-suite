@@ -103,13 +103,12 @@ arrow-btn:active {
 dropdown-overlay {
     position-type: self-directed;
     z-index: 9999;
-    width: 160px;
+    width: 170px;
     height: auto;
-    top: 30px;
-    left: 0px;
+    top: 44px;
+    right: 16px;
     child-space: 4px;
     row-between: 0px;
-    overflow: visible;
 }
 
 dropdown-overlay:not(.dropdown-visible) {

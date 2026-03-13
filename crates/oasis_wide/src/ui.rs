@@ -19,7 +19,6 @@ struct Data {
 enum DataEvent {
     PresetChanged,
     TogglePresetList,
-    ClosePresetList,
 }
 
 impl Model for Data {
@@ -31,9 +30,6 @@ impl Model for Data {
             }
             DataEvent::TogglePresetList => {
                 self.show_preset_list = !self.show_preset_list;
-            }
-            DataEvent::ClosePresetList => {
-                self.show_preset_list = false;
             }
         });
     }
@@ -92,23 +88,9 @@ impl PresetBrowser {
             HStack::new(cx, |cx| {
                 ArrowButton::new(cx, ArrowDirection::Left, PresetAction::Previous);
 
-                VStack::new(cx, |cx| {
-                    Label::new(cx, Data::preset_name)
-                        .class("preset-name")
-                        .on_press(|cx| cx.emit(DataEvent::TogglePresetList));
-
-                    DropdownOverlay::new(cx, Data::show_preset_list, |cx| {
-                        for (i, preset) in presets::FACTORY_PRESETS.iter().enumerate() {
-                            let idx = i;
-                            Label::new(cx, preset.name)
-                                .class("preset-list-item")
-                                .on_press(move |cx| {
-                                    cx.emit(PresetAction::Select(idx));
-                                });
-                        }
-                    });
-                })
-                .class("preset-name-container");
+                Label::new(cx, Data::preset_name)
+                    .class("preset-name")
+                    .on_press(|cx| cx.emit(DataEvent::TogglePresetList));
 
                 ArrowButton::new(cx, ArrowDirection::Right, PresetAction::Next);
             })
@@ -275,5 +257,17 @@ pub fn create_editor(params: Arc<OasisWideParams>) -> Option<Box<dyn Editor>> {
             .class("footer");
         })
         .class("main-container");
+
+        // Dropdown placed LAST in the tree so it paints on top of everything
+        DropdownOverlay::new(cx, Data::show_preset_list, |cx| {
+            for (i, preset) in presets::FACTORY_PRESETS.iter().enumerate() {
+                let idx = i;
+                Label::new(cx, preset.name)
+                    .class("preset-list-item")
+                    .on_press(move |cx| {
+                        cx.emit(PresetAction::Select(idx));
+                    });
+            }
+        });
     })
 }
