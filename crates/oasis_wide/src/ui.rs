@@ -16,107 +16,69 @@ struct Data {
 }
 
 #[derive(Debug, Clone)]
-enum DataEvent {
-    PresetChanged,
-    TogglePresetList,
-}
-
-impl Model for Data {
-    fn event(&mut self, _cx: &mut EventContext, event: &mut Event) {
-        event.map(|e, _| match e {
-            DataEvent::PresetChanged => {
-                self.preset_name = presets::current_preset_name().to_string();
-                self.show_preset_list = false;
-            }
-            DataEvent::TogglePresetList => {
-                self.show_preset_list = !self.show_preset_list;
-            }
-        });
-    }
-}
-
-#[derive(Debug, Clone)]
 enum PresetAction {
     Next,
     Previous,
     Select(usize),
+    ToggleList,
 }
 
-fn apply_preset(cx: &mut EventContext, idx: usize) {
-    if idx >= presets::FACTORY_PRESETS.len() {
-        return;
-    }
-
-    presets::CURRENT_PRESET_INDEX.store(idx, std::sync::atomic::Ordering::Relaxed);
-    let preset = &presets::FACTORY_PRESETS[idx];
-
-    let updates: Vec<(ParamPtr, f32)> = if let Some(data) = cx.data::<Data>() {
-        let params = &data.params;
-        preset.values.iter().filter_map(|&(param_id, norm_val)| {
-            let ptr = match param_id {
-                "width" => Some(params.width.as_ptr()),
-                "mid_gain" => Some(params.mid_gain.as_ptr()),
-                "side_gain" => Some(params.side_gain.as_ptr()),
-                "haas_delay" => Some(params.haas_delay_ms.as_ptr()),
-                "haas_channel" => Some(params.haas_channel.as_ptr()),
-                "bass_mono_on" => Some(params.bass_mono_enabled.as_ptr()),
-                "bass_mono_freq" => Some(params.bass_mono_freq.as_ptr()),
-                "mix" => Some(params.mix.as_ptr()),
-                "output_gain" => Some(params.output_gain.as_ptr()),
-                _ => None,
-            };
-            ptr.map(|p| (p, norm_val))
-        }).collect()
-    } else {
-        return;
-    };
-
-    for (ptr, norm_val) in updates {
-        cx.emit(RawParamEvent::BeginSetParameter(ptr));
-        cx.emit(RawParamEvent::SetParameterNormalized(ptr, norm_val));
-        cx.emit(RawParamEvent::EndSetParameter(ptr));
-    }
-
-    cx.emit(DataEvent::PresetChanged);
-}
-
-struct PresetBrowser;
-
-impl PresetBrowser {
-    fn new(cx: &mut Context) -> Handle<'_, Self> {
-        Self.build(cx, |cx| {
-            HStack::new(cx, |cx| {
-                ArrowButton::new(cx, ArrowDirection::Left, PresetAction::Previous);
-
-                Label::new(cx, Data::preset_name)
-                    .class("preset-name")
-                    .on_press(|cx| cx.emit(DataEvent::TogglePresetList));
-
-                ArrowButton::new(cx, ArrowDirection::Right, PresetAction::Next);
-            })
-            .class("preset-browser");
-        })
-    }
-}
-
-impl View for PresetBrowser {
+impl Model for Data {
     fn event(&mut self, cx: &mut EventContext, event: &mut Event) {
         event.map(|action, _| {
-            match action {
+            let new_idx = match action {
                 PresetAction::Next => {
                     presets::next_preset();
-                    let idx = presets::CURRENT_PRESET_INDEX
-                        .load(std::sync::atomic::Ordering::Relaxed);
-                    apply_preset(cx, idx);
+                    Some(presets::CURRENT_PRESET_INDEX
+                        .load(std::sync::atomic::Ordering::Relaxed))
                 }
                 PresetAction::Previous => {
                     presets::prev_preset();
-                    let idx = presets::CURRENT_PRESET_INDEX
-                        .load(std::sync::atomic::Ordering::Relaxed);
-                    apply_preset(cx, idx);
+                    Some(presets::CURRENT_PRESET_INDEX
+                        .load(std::sync::atomic::Ordering::Relaxed))
                 }
                 PresetAction::Select(idx) => {
-                    apply_preset(cx, *idx);
+                    Some(*idx)
+                }
+                PresetAction::ToggleList => {
+                    self.show_preset_list = !self.show_preset_list;
+                    None
+                }
+            };
+
+            if let Some(idx) = new_idx {
+                if idx < presets::FACTORY_PRESETS.len() {
+                    presets::CURRENT_PRESET_INDEX
+                        .store(idx, std::sync::atomic::Ordering::Relaxed);
+                    let preset = &presets::FACTORY_PRESETS[idx];
+
+                    let updates: Vec<(ParamPtr, f32)> = {
+                        let params = &self.params;
+                        preset.values.iter().filter_map(|&(param_id, norm_val)| {
+                            let ptr = match param_id {
+                                "width" => Some(params.width.as_ptr()),
+                                "mid_gain" => Some(params.mid_gain.as_ptr()),
+                                "side_gain" => Some(params.side_gain.as_ptr()),
+                                "haas_delay" => Some(params.haas_delay_ms.as_ptr()),
+                                "haas_channel" => Some(params.haas_channel.as_ptr()),
+                                "bass_mono_on" => Some(params.bass_mono_enabled.as_ptr()),
+                                "bass_mono_freq" => Some(params.bass_mono_freq.as_ptr()),
+                                "mix" => Some(params.mix.as_ptr()),
+                                "output_gain" => Some(params.output_gain.as_ptr()),
+                                _ => None,
+                            };
+                            ptr.map(|p| (p, norm_val))
+                        }).collect()
+                    };
+
+                    for (ptr, norm_val) in updates {
+                        cx.emit(RawParamEvent::BeginSetParameter(ptr));
+                        cx.emit(RawParamEvent::SetParameterNormalized(ptr, norm_val));
+                        cx.emit(RawParamEvent::EndSetParameter(ptr));
+                    }
+
+                    self.preset_name = presets::current_preset_name().to_string();
+                    self.show_preset_list = false;
                 }
             }
         });
@@ -196,7 +158,16 @@ pub fn create_editor(params: Arc<OasisWideParams>) -> Option<Box<dyn Editor>> {
                 Label::new(cx, "v1.0")
                     .class("header-version");
 
-                PresetBrowser::new(cx);
+                HStack::new(cx, |cx| {
+                    ArrowButton::new(cx, ArrowDirection::Left, PresetAction::Previous);
+
+                    Label::new(cx, Data::preset_name)
+                        .class("preset-name")
+                        .on_press(|cx| cx.emit(PresetAction::ToggleList));
+
+                    ArrowButton::new(cx, ArrowDirection::Right, PresetAction::Next);
+                })
+                .class("preset-browser");
             })
             .class("header-bar");
 
@@ -258,7 +229,7 @@ pub fn create_editor(params: Arc<OasisWideParams>) -> Option<Box<dyn Editor>> {
         })
         .class("main-container");
 
-        // Dropdown placed LAST in the tree so it paints on top of everything
+        // Dropdown at root level — last in tree so it renders on top
         DropdownOverlay::new(cx, Data::show_preset_list, |cx| {
             for (i, preset) in presets::FACTORY_PRESETS.iter().enumerate() {
                 let idx = i;
