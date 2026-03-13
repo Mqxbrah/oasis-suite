@@ -2013,6 +2013,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "oasis_eq"
+version = "1.0.0"
+dependencies = [
+ "nih_plug",
+ "nih_plug_vizia",
+ "oasis_core",
+ "oasis_ui",
+]
+
+[[package]]
 name = "oasis_limit"
 version = "1.0.0"
 dependencies = [
