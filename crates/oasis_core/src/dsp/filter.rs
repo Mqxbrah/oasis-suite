@@ -72,6 +72,119 @@ impl Biquad {
         };
     }
 
+    pub fn set_bandpass(&mut self, freq_hz: f32, q: f32, sample_rate: f32) {
+        let omega = 2.0 * PI * freq_hz / sample_rate;
+        let sin_omega = omega.sin();
+        let cos_omega = omega.cos();
+        let alpha = sin_omega / (2.0 * q);
+
+        let a0 = 1.0 + alpha;
+        let a0_inv = 1.0 / a0;
+
+        self.coeffs = BiquadCoeffs {
+            b0: alpha * a0_inv,
+            b1: 0.0,
+            b2: -alpha * a0_inv,
+            a1: (-2.0 * cos_omega) * a0_inv,
+            a2: (1.0 - alpha) * a0_inv,
+        };
+    }
+
+    pub fn set_notch(&mut self, freq_hz: f32, q: f32, sample_rate: f32) {
+        let omega = 2.0 * PI * freq_hz / sample_rate;
+        let sin_omega = omega.sin();
+        let cos_omega = omega.cos();
+        let alpha = sin_omega / (2.0 * q);
+
+        let a0 = 1.0 + alpha;
+        let a0_inv = 1.0 / a0;
+
+        self.coeffs = BiquadCoeffs {
+            b0: a0_inv,
+            b1: (-2.0 * cos_omega) * a0_inv,
+            b2: a0_inv,
+            a1: (-2.0 * cos_omega) * a0_inv,
+            a2: (1.0 - alpha) * a0_inv,
+        };
+    }
+
+    pub fn set_peak(&mut self, freq_hz: f32, q: f32, gain_db: f32, sample_rate: f32) {
+        let a = 10.0_f32.powf(gain_db / 40.0);
+        let omega = 2.0 * PI * freq_hz / sample_rate;
+        let sin_omega = omega.sin();
+        let cos_omega = omega.cos();
+        let alpha = sin_omega / (2.0 * q);
+
+        let a0 = 1.0 + alpha / a;
+        let a0_inv = 1.0 / a0;
+
+        self.coeffs = BiquadCoeffs {
+            b0: (1.0 + alpha * a) * a0_inv,
+            b1: (-2.0 * cos_omega) * a0_inv,
+            b2: (1.0 - alpha * a) * a0_inv,
+            a1: (-2.0 * cos_omega) * a0_inv,
+            a2: (1.0 - alpha / a) * a0_inv,
+        };
+    }
+
+    pub fn set_low_shelf(&mut self, freq_hz: f32, q: f32, gain_db: f32, sample_rate: f32) {
+        let a = 10.0_f32.powf(gain_db / 40.0);
+        let omega = 2.0 * PI * freq_hz / sample_rate;
+        let sin_omega = omega.sin();
+        let cos_omega = omega.cos();
+        let alpha = sin_omega / (2.0 * q);
+        let two_sqrt_a_alpha = 2.0 * a.sqrt() * alpha;
+
+        let a0 = (a + 1.0) + (a - 1.0) * cos_omega + two_sqrt_a_alpha;
+        let a0_inv = 1.0 / a0;
+
+        self.coeffs = BiquadCoeffs {
+            b0: (a * ((a + 1.0) - (a - 1.0) * cos_omega + two_sqrt_a_alpha)) * a0_inv,
+            b1: (2.0 * a * ((a - 1.0) - (a + 1.0) * cos_omega)) * a0_inv,
+            b2: (a * ((a + 1.0) - (a - 1.0) * cos_omega - two_sqrt_a_alpha)) * a0_inv,
+            a1: (-2.0 * ((a - 1.0) + (a + 1.0) * cos_omega)) * a0_inv,
+            a2: ((a + 1.0) + (a - 1.0) * cos_omega - two_sqrt_a_alpha) * a0_inv,
+        };
+    }
+
+    pub fn set_high_shelf(&mut self, freq_hz: f32, q: f32, gain_db: f32, sample_rate: f32) {
+        let a = 10.0_f32.powf(gain_db / 40.0);
+        let omega = 2.0 * PI * freq_hz / sample_rate;
+        let sin_omega = omega.sin();
+        let cos_omega = omega.cos();
+        let alpha = sin_omega / (2.0 * q);
+        let two_sqrt_a_alpha = 2.0 * a.sqrt() * alpha;
+
+        let a0 = (a + 1.0) - (a - 1.0) * cos_omega + two_sqrt_a_alpha;
+        let a0_inv = 1.0 / a0;
+
+        self.coeffs = BiquadCoeffs {
+            b0: (a * ((a + 1.0) + (a - 1.0) * cos_omega + two_sqrt_a_alpha)) * a0_inv,
+            b1: (-2.0 * a * ((a - 1.0) + (a + 1.0) * cos_omega)) * a0_inv,
+            b2: (a * ((a + 1.0) + (a - 1.0) * cos_omega - two_sqrt_a_alpha)) * a0_inv,
+            a1: (2.0 * ((a - 1.0) - (a + 1.0) * cos_omega)) * a0_inv,
+            a2: ((a + 1.0) - (a - 1.0) * cos_omega - two_sqrt_a_alpha) * a0_inv,
+        };
+    }
+
+    pub fn set_allpass(&mut self, freq_hz: f32, q: f32, sample_rate: f32) {
+        let omega = 2.0 * PI * freq_hz / sample_rate;
+        let sin_omega = omega.sin();
+        let cos_omega = omega.cos();
+        let alpha = sin_omega / (2.0 * q);
+
+        let a0 = 1.0 + alpha;
+        let a0_inv = 1.0 / a0;
+
+        self.coeffs = BiquadCoeffs {
+            b0: (1.0 - alpha) * a0_inv,
+            b1: (-2.0 * cos_omega) * a0_inv,
+            b2: (1.0 + alpha) * a0_inv,
+            a1: (-2.0 * cos_omega) * a0_inv,
+            a2: (1.0 - alpha) * a0_inv,
+        };
+    }
+
     #[inline]
     pub fn process(&mut self, input: f32) -> f32 {
         let c = &self.coeffs;
