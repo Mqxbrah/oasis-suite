@@ -2,6 +2,7 @@ use nih_plug::prelude::*;
 use nih_plug_vizia::vizia::prelude::*;
 use nih_plug_vizia::widgets::*;
 use nih_plug_vizia::{assets, create_vizia_editor, ViziaTheming};
+use oasis_ui::ParamKnob;
 use std::sync::Arc;
 
 use crate::params::OasisWideParams;
@@ -108,27 +109,32 @@ impl View for PresetBrowser {
     }
 }
 
-fn param_row<L, Params, P, FMap>(
+fn knob_control<L, Params, P, FMap>(
     cx: &mut Context,
     label_text: &str,
     params: L,
     params_to_param: FMap,
+    bipolar: bool,
 ) where
     L: Lens<Target = Params> + Clone,
     Params: 'static,
     P: Param + 'static,
     FMap: Fn(&Params) -> &P + Copy + 'static,
 {
-    HStack::new(cx, |cx| {
-        Label::new(cx, label_text).class("param-label");
-        ParamSlider::new(cx, params, params_to_param)
-            .class("param-slider-wrap")
-            .set_style(ParamSliderStyle::FromLeft);
+    let value_lens = params.clone().map(move |p| {
+        let param = params_to_param(p);
+        param.normalized_value_to_string(param.unmodulated_normalized_value(), true)
+    });
+
+    VStack::new(cx, |cx| {
+        Label::new(cx, label_text).class("knob-label");
+        ParamKnob::new(cx, params, params_to_param, bipolar);
+        Label::new(cx, value_lens).class("knob-value");
     })
-    .class("param-row");
+    .class("knob-group");
 }
 
-fn param_row_centered<L, Params, P, FMap>(
+fn toggle_control<L, Params, P, FMap>(
     cx: &mut Context,
     label_text: &str,
     params: L,
@@ -140,31 +146,11 @@ fn param_row_centered<L, Params, P, FMap>(
     FMap: Fn(&Params) -> &P + Copy + 'static,
 {
     HStack::new(cx, |cx| {
-        Label::new(cx, label_text).class("param-label");
-        ParamSlider::new(cx, params, params_to_param)
-            .class("param-slider-wrap")
-            .set_style(ParamSliderStyle::Centered);
-    })
-    .class("param-row");
-}
-
-fn param_row_button<L, Params, P, FMap>(
-    cx: &mut Context,
-    label_text: &str,
-    params: L,
-    params_to_param: FMap,
-) where
-    L: Lens<Target = Params> + Clone,
-    Params: 'static,
-    P: Param + 'static,
-    FMap: Fn(&Params) -> &P + Copy + 'static,
-{
-    HStack::new(cx, |cx| {
-        Label::new(cx, label_text).class("param-label");
+        Label::new(cx, label_text).class("toggle-label");
         ParamButton::new(cx, params, params_to_param)
-            .class("param-slider-wrap");
+            .class("toggle-btn-wrap");
     })
-    .class("param-row");
+    .class("toggle-row");
 }
 
 pub fn create_editor(params: Arc<OasisWideParams>) -> Option<Box<dyn Editor>> {
@@ -202,69 +188,50 @@ pub fn create_editor(params: Arc<OasisWideParams>) -> Option<Box<dyn Editor>> {
 
             // ── Main Content ──
             HStack::new(cx, |cx| {
-                // ── Left Column: Stereo Image ──
+                // ── Left Column ──
                 VStack::new(cx, |cx| {
                     VStack::new(cx, |cx| {
                         Label::new(cx, "STEREO IMAGE").class("section-title");
-
-                        param_row(
-                            cx, "Width",
-                            Data::params, |p| &p.width,
-                        );
-                        param_row_centered(
-                            cx, "Mid Gain",
-                            Data::params, |p| &p.mid_gain,
-                        );
-                        param_row_centered(
-                            cx, "Side Gain",
-                            Data::params, |p| &p.side_gain,
-                        );
+                        HStack::new(cx, |cx| {
+                            knob_control(cx, "Width", Data::params, |p| &p.width, false);
+                            knob_control(cx, "Mid", Data::params, |p| &p.mid_gain, true);
+                            knob_control(cx, "Side", Data::params, |p| &p.side_gain, true);
+                        })
+                        .class("knob-row");
                     })
                     .class("section");
 
                     VStack::new(cx, |cx| {
                         Label::new(cx, "BASS MONO").class("section-title");
-
-                        param_row_button(
-                            cx, "Enable",
-                            Data::params, |p| &p.bass_mono_enabled,
-                        );
-                        param_row(
-                            cx, "Frequency",
-                            Data::params, |p| &p.bass_mono_freq,
-                        );
+                        toggle_control(cx, "Enable", Data::params, |p| &p.bass_mono_enabled);
+                        HStack::new(cx, |cx| {
+                            knob_control(cx, "Frequency", Data::params, |p| &p.bass_mono_freq, false);
+                        })
+                        .class("knob-row");
                     })
                     .class("section");
                 })
                 .class("column");
 
-                // ── Right Column: Haas + Output ──
+                // ── Right Column ──
                 VStack::new(cx, |cx| {
                     VStack::new(cx, |cx| {
                         Label::new(cx, "HAAS EFFECT").class("section-title");
-
-                        param_row(
-                            cx, "Delay",
-                            Data::params, |p| &p.haas_delay_ms,
-                        );
-                        param_row_button(
-                            cx, "Channel",
-                            Data::params, |p| &p.haas_channel,
-                        );
+                        toggle_control(cx, "Channel", Data::params, |p| &p.haas_channel);
+                        HStack::new(cx, |cx| {
+                            knob_control(cx, "Delay", Data::params, |p| &p.haas_delay_ms, false);
+                        })
+                        .class("knob-row");
                     })
                     .class("section");
 
                     VStack::new(cx, |cx| {
                         Label::new(cx, "OUTPUT").class("section-title");
-
-                        param_row(
-                            cx, "Mix",
-                            Data::params, |p| &p.mix,
-                        );
-                        param_row_centered(
-                            cx, "Gain",
-                            Data::params, |p| &p.output_gain,
-                        );
+                        HStack::new(cx, |cx| {
+                            knob_control(cx, "Mix", Data::params, |p| &p.mix, false);
+                            knob_control(cx, "Gain", Data::params, |p| &p.output_gain, true);
+                        })
+                        .class("knob-row");
                     })
                     .class("section");
                 })
@@ -275,8 +242,7 @@ pub fn create_editor(params: Arc<OasisWideParams>) -> Option<Box<dyn Editor>> {
 
             // ── Footer ──
             HStack::new(cx, |cx| {
-                Label::new(cx, "Oasis Suite")
-                    .class("footer-text");
+                Label::new(cx, "Oasis Suite").class("footer-text");
             })
             .class("footer");
         })
