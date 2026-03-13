@@ -95,18 +95,21 @@ arrow-btn:active {
 }
 
 .preset-popup-wrapper {
-    width: 0px;
+    width: 160px;
     height: 0px;
+    top: 28px;
+    left: 0px;
 }
 
 .preset-dropdown {
-    background-color: #2a2a2c;
+    background-color: #252528;
     border-radius: 6px;
     border-width: 1px;
-    border-color: #3a3a3c;
+    border-color: #4a4a4c;
     width: 160px;
-    child-space: 2px;
+    child-space: 4px;
     row-between: 0px;
+    outer-shadow: 0 4 12 #00000080;
 }
 
 .preset-list-item {
@@ -118,12 +121,12 @@ arrow-btn:active {
     child-top: 1s;
     child-bottom: 1s;
     cursor: hand;
+    border-radius: 4px;
 }
 
 .preset-list-item:hover {
     background-color: #0a84ff;
     color: #ffffff;
-    border-radius: 4px;
 }
 
 /* ── Content Area ── */
