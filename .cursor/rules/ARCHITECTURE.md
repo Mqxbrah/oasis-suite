@@ -14,12 +14,16 @@ This document defines the complete architecture for the Oasis Suite VST3/CLAP pl
 6. [Parameter System](#parameter-system)
 7. [State Management](#state-management)
 8. [DSP Library](#dsp-library)
-9. [UI Framework](#ui-framework)
-10. [Plugin Template](#plugin-template)
-11. [Debug Infrastructure](#debug-infrastructure)
-12. [Data Flow](#data-flow)
-13. [Preset System](#preset-system)
-14. [Testing Strategy](#testing-strategy)
+9. [Multi-Band and Crossover Architecture](#multi-band-and-crossover-architecture)
+10. [Mid/Side Processing](#midside-processing)
+11. [Latency Reporting](#latency-reporting)
+12. [Error Handling Strategy](#error-handling-strategy)
+13. [UI Framework](#ui-framework)
+14. [Plugin Template](#plugin-template)
+15. [Debug Infrastructure](#debug-infrastructure)
+16. [Data Flow](#data-flow)
+17. [Preset System](#preset-system)
+18. [Testing Strategy](#testing-strategy)
 
 ---
 
@@ -365,16 +369,20 @@ These rules are **inviolable**. Every piece of code that touches the audio threa
 - AtomicF32, AtomicBool (atomics)
 - &[f32], &mut [f32] (borrowed slices)
 - Fixed-size arrays [f32; N]
+- Pre-allocated Vec/Box (allocated once during init, never resized on audio thread)
 - Structs containing only safe types
 
-// UNSAFE: Never use on audio thread
-- Vec (can reallocate)
-- String (allocates)
+// FORBIDDEN on audio thread (allocations/blocking)
+- Vec::push, Vec::extend, Vec::resize (can reallocate)
+- String::new, format!, to_string (allocates)
 - Box::new() (allocates)
 - Mutex::lock() (blocks)
 - std::io::* (system calls)
-- println!, log::* (I/O)
+- println!, log::*, eprintln! (I/O)
+- HashMap/BTreeMap operations (can allocate)
 ```
+
+**Clarification:** A `Vec<f32>` used as a pre-allocated buffer (created during `initialize()`, indexed but never grown on the audio thread) is perfectly safe. The danger is any operation that could trigger reallocation.
 
 ### Sample Rate Independence
 
@@ -521,37 +529,55 @@ pub struct DynamicsParams {
 
 ## State Management
 
+### How nih-plug State Works
+
+nih-plug serializes parameter state via serde. Each `Params` struct can be snapshot to/from JSON using `nih_plug::params::serialize` and `nih_plug::params::deserialize`. A/B and Undo/Redo are built on top of this.
+
 ### A/B Comparison
 
-Two complete parameter state snapshots, instantly switchable:
+Two complete parameter state snapshots stored as serialized JSON, instantly switchable:
 
 ```rust
-pub struct ABState<P: Params> {
-    current: ABSlot,           // Which slot is active
-    slot_a: ParamSnapshot,     // Serialized parameter state
-    slot_b: ParamSnapshot,
+pub struct ABState {
+    current: ABSlot,
+    slot_a: Option<serde_json::Value>,  // Serialized param state
+    slot_b: Option<serde_json::Value>,
 }
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum ABSlot { A, B }
 
-impl<P: Params> ABState<P> {
-    // Toggle between A and B
-    pub fn toggle(&mut self, params: &P) {
-        self.save_current(params);
-        self.current = match self.current {
-            ABSlot::A => ABSlot::B,
-            ABSlot::B => ABSlot::A,
-        };
-        self.load_current(params);
+impl ABState {
+    pub fn new() -> Self {
+        Self { current: ABSlot::A, slot_a: None, slot_b: None }
     }
-    
-    // Copy current slot to the other
-    pub fn copy_to_other(&mut self, params: &P) {
-        self.save_current(params);
+
+    /// Snapshot current params into the active slot, load the other slot
+    pub fn toggle(&mut self, setter: &ParamSetter, params: &impl Params) {
+        let snapshot = nih_plug::params::serialize::serialize_json(params);
         match self.current {
-            ABSlot::A => self.slot_b = self.slot_a.clone(),
-            ABSlot::B => self.slot_a = self.slot_b.clone(),
+            ABSlot::A => {
+                self.slot_a = Some(snapshot);
+                if let Some(ref state) = self.slot_b {
+                    nih_plug::params::serialize::deserialize_json(params, state.clone(), setter);
+                }
+                self.current = ABSlot::B;
+            }
+            ABSlot::B => {
+                self.slot_b = Some(snapshot);
+                if let Some(ref state) = self.slot_a {
+                    nih_plug::params::serialize::deserialize_json(params, state.clone(), setter);
+                }
+                self.current = ABSlot::A;
+            }
+        }
+    }
+
+    pub fn copy_to_other(&mut self, params: &impl Params) {
+        let snapshot = nih_plug::params::serialize::serialize_json(params);
+        match self.current {
+            ABSlot::A => self.slot_b = Some(snapshot),
+            ABSlot::B => self.slot_a = Some(snapshot),
         }
     }
 }
@@ -559,76 +585,75 @@ impl<P: Params> ABState<P> {
 
 ### Undo/Redo
 
-Ring buffer of parameter changes with efficient state reconstruction:
+Delta-based history using a `VecDeque` with a max capacity (not a ring buffer, since we need random access and truncation):
 
 ```rust
+use std::collections::VecDeque;
+
+const MAX_UNDO_STEPS: usize = 128;
+
 pub struct UndoHistory {
-    // Store deltas, not full snapshots (memory efficient)
-    changes: RingBuffer<ParamChange>,
-    position: usize,  // Current position in history
+    changes: VecDeque<ParamChange>,
+    position: usize,
 }
 
 pub struct ParamChange {
-    param_id: &'static str,
-    old_value: f32,
-    new_value: f32,
-    timestamp: u64,
+    param_hash: u32,          // nih-plug param hash (stable identifier)
+    old_normalized: f32,      // Normalized 0..1 value before change
+    new_normalized: f32,      // Normalized 0..1 value after change
 }
 
 impl UndoHistory {
-    pub fn record(&mut self, param_id: &'static str, old: f32, new: f32) {
-        // Truncate any redo history
+    pub fn new() -> Self {
+        Self { changes: VecDeque::with_capacity(MAX_UNDO_STEPS), position: 0 }
+    }
+
+    pub fn record(&mut self, param_hash: u32, old_normalized: f32, new_normalized: f32) {
+        // Discard any redo-able future beyond current position
         self.changes.truncate(self.position);
-        self.changes.push(ParamChange {
-            param_id,
-            old_value: old,
-            new_value: new,
-            timestamp: now(),
+        self.changes.push_back(ParamChange {
+            param_hash,
+            old_normalized,
+            new_normalized,
         });
+        // Evict oldest if over capacity
+        if self.changes.len() > MAX_UNDO_STEPS {
+            self.changes.pop_front();
+        }
         self.position = self.changes.len();
     }
-    
-    pub fn undo(&mut self, params: &impl Params) -> bool {
+
+    /// Undo: look up param by hash via ParamSetter, apply old_normalized
+    pub fn undo(&mut self, setter: &ParamSetter, param_lookup: &dyn Fn(u32) -> Option<&dyn Param>) -> bool {
         if self.position == 0 { return false; }
         self.position -= 1;
         let change = &self.changes[self.position];
-        // Apply old value
-        params.set_value(change.param_id, change.old_value);
+        if let Some(param) = param_lookup(change.param_hash) {
+            setter.set_parameter_normalized(param, change.old_normalized);
+        }
         true
     }
-    
-    pub fn redo(&mut self, params: &impl Params) -> bool {
+
+    /// Redo: apply new_normalized
+    pub fn redo(&mut self, setter: &ParamSetter, param_lookup: &dyn Fn(u32) -> Option<&dyn Param>) -> bool {
         if self.position >= self.changes.len() { return false; }
         let change = &self.changes[self.position];
-        params.set_value(change.param_id, change.new_value);
+        if let Some(param) = param_lookup(change.param_hash) {
+            setter.set_parameter_normalized(param, change.new_normalized);
+        }
         self.position += 1;
         true
     }
 }
 ```
 
+**Integration:** The UI layer hooks into parameter change callbacks. When the user adjusts a knob, the widget records the before/after normalized values into `UndoHistory`. A/B snapshots are taken when the user clicks the A/B toggle — this is a UI-thread-only operation and never touches the audio thread.
+
 ---
 
 ## DSP Library
 
-### Module Organization
-
-```
-oasis_core/src/dsp/
-├── mod.rs              # Re-exports all public types
-├── filter.rs           # Filters (biquad, SVF, etc.)
-├── dynamics.rs         # Dynamics processing
-├── delay.rs            # Delay lines
-├── oscillator.rs       # Wavetable, classic waveforms
-├── envelope.rs         # ADSR, envelope follower
-├── lfo.rs              # LFO with shapes
-├── waveshaper.rs       # Saturation curves
-├── reverb.rs           # FDN, diffusion
-├── pitch.rs            # Pitch shifting
-├── fft.rs              # Spectrum analysis
-├── oversampler.rs      # Up/downsampling
-└── simd.rs             # SIMD abstractions
-```
+All DSP primitives live in `oasis_core/src/dsp/` (see [Project Structure](#project-structure) for the full file listing). Each module is a focused, composable building block.
 
 ### Filter System
 
@@ -776,36 +801,237 @@ impl DelayLine {
 
 ### Oscillator System (For Synth)
 
+A single wavetable per waveform would alias at higher frequencies. Professional playback requires **multi-resolution wavetables** — one table per octave range, each with harmonics rolled off at that range's Nyquist.
+
 ```rust
-// Band-limited waveforms via wavetable
-pub struct Oscillator {
-    phase: f32,                  // 0.0 to 1.0
-    phase_increment: f32,        // Set by frequency
-    wavetable: &'static [f32],   // Baked wavetable
+const TABLE_SIZE: usize = 2048;
+const NUM_OCTAVE_TABLES: usize = 11;  // Covers MIDI range ~16Hz to ~16kHz
+
+/// One waveform stored at multiple resolutions for alias-free playback
+pub struct WavetableSet {
+    /// tables[0] = full harmonics (low frequencies)
+    /// tables[10] = fundamental only (highest frequencies)
+    tables: [[f32; TABLE_SIZE]; NUM_OCTAVE_TABLES],
 }
 
-// Wavetables generated at compile time
-pub static SINE_TABLE: [f32; 2048] = generate_sine();
-pub static SAW_TABLE: [f32; 2048] = generate_saw_bandlimited();
-pub static SQUARE_TABLE: [f32; 2048] = generate_square_bandlimited();
-pub static TRI_TABLE: [f32; 2048] = generate_tri_bandlimited();
+pub struct Oscillator {
+    phase: f32,
+    phase_increment: f32,
+    current_table_index: usize,
+}
 
 impl Oscillator {
     pub fn set_frequency(&mut self, freq_hz: f32, sample_rate: f32) {
         self.phase_increment = freq_hz / sample_rate;
+        // Select the table whose highest harmonic stays below Nyquist
+        let max_harmonic = (sample_rate * 0.5 / freq_hz) as usize;
+        self.current_table_index = octave_index_from_harmonic_count(max_harmonic);
     }
-    
-    pub fn next_sample(&mut self) -> f32 {
-        let idx = self.phase * self.wavetable.len() as f32;
-        let sample = self.read_interpolated(idx);
-        
+
+    pub fn next_sample(&mut self, wavetable: &WavetableSet) -> f32 {
+        let table = &wavetable.tables[self.current_table_index];
+        let idx = self.phase * TABLE_SIZE as f32;
+        let sample = interpolate_cubic(table, idx);
+
         self.phase += self.phase_increment;
-        if self.phase >= 1.0 {
-            self.phase -= 1.0;
-        }
-        
+        if self.phase >= 1.0 { self.phase -= 1.0; }
         sample
     }
+}
+
+// Wavetable sets generated at init time (too large for const eval)
+// Built once in initialize(), stored in plugin struct, never reallocated
+pub fn build_saw_tables() -> WavetableSet { ... }
+pub fn build_square_tables() -> WavetableSet { ... }
+pub fn build_tri_tables() -> WavetableSet { ... }
+
+// Sine doesn't need multi-resolution (only fundamental)
+pub static SINE_TABLE: [f32; TABLE_SIZE] = generate_sine();
+```
+
+**Crossfading between tables:** For smooth transitions when frequency changes octave boundaries, interpolate between adjacent tables using the fractional octave position. This prevents audible "popping" during portamento or pitch modulation.
+
+---
+
+## Multi-Band and Crossover Architecture
+
+Several plugins offer multi-band modes (Drive, Punch, Limit, Wide). Rather than each plugin implementing its own crossover, `oasis_core` provides a shared Linkwitz-Riley crossover system.
+
+```rust
+// oasis_core/src/dsp/crossover.rs
+
+/// Linkwitz-Riley crossover (phase-coherent sum)
+/// 4th-order (LR4) = two cascaded 2nd-order Butterworth filters
+pub struct CrossoverBand {
+    low_pass: [Biquad; 2],   // Two cascaded for LR4
+    high_pass: [Biquad; 2],
+}
+
+/// 3-band crossover for low/mid/high splits
+pub struct ThreeBandCrossover {
+    low_mid: CrossoverBand,   // Split at low-mid frequency
+    mid_high: CrossoverBand,  // Split at mid-high frequency
+}
+
+pub struct BandBuffers {
+    pub low: [f32; MAX_BLOCK_SIZE],
+    pub mid: [f32; MAX_BLOCK_SIZE],
+    pub high: [f32; MAX_BLOCK_SIZE],
+}
+
+impl ThreeBandCrossover {
+    pub fn new(low_mid_hz: f32, mid_high_hz: f32, sample_rate: f32) -> Self { ... }
+
+    /// Split a mono signal into three bands (pre-allocated output buffers)
+    pub fn split(&mut self, input: &[f32], output: &mut BandBuffers) { ... }
+
+    /// Recombine bands (sums back into output slice)
+    pub fn recombine(bands: &BandBuffers, output: &mut [f32]) {
+        for i in 0..output.len() {
+            output[i] = bands.low[i] + bands.mid[i] + bands.high[i];
+        }
+    }
+
+    pub fn set_frequencies(&mut self, low_mid_hz: f32, mid_high_hz: f32, sample_rate: f32) { ... }
+}
+```
+
+**Usage in plugins:** Plugins that support multi-band processing hold a `ThreeBandCrossover` and per-band DSP instances. The crossover splits → each band is processed independently → bands are recombined. The Linkwitz-Riley topology guarantees flat summing when bands are unprocessed.
+
+---
+
+## Mid/Side Processing
+
+Multiple plugins (Drive, Wide, EQ) support mid/side processing. Shared encode/decode utilities live in `oasis_core`:
+
+```rust
+// oasis_core/src/dsp/mid_side.rs
+
+/// Encode stereo (L, R) to mid/side (M, S)
+#[inline]
+pub fn encode(left: f32, right: f32) -> (f32, f32) {
+    let mid = (left + right) * 0.5;
+    let side = (left - right) * 0.5;
+    (mid, side)
+}
+
+/// Decode mid/side (M, S) back to stereo (L, R)
+#[inline]
+pub fn decode(mid: f32, side: f32) -> (f32, f32) {
+    let left = mid + side;
+    let right = mid - side;
+    (left, right)
+}
+
+/// Block-based M/S encode for efficiency
+pub fn encode_block(left: &[f32], right: &[f32], mid: &mut [f32], side: &mut [f32]) {
+    for i in 0..left.len() {
+        mid[i] = (left[i] + right[i]) * 0.5;
+        side[i] = (left[i] - right[i]) * 0.5;
+    }
+}
+
+pub fn decode_block(mid: &[f32], side: &[f32], left: &mut [f32], right: &mut [f32]) {
+    for i in 0..mid.len() {
+        left[i] = mid[i] + side[i];
+        right[i] = mid[i] - side[i];
+    }
+}
+```
+
+---
+
+## Latency Reporting
+
+Plugins that introduce latency (lookahead, linear phase, oversampling) must report it so the DAW can compensate. nih-plug handles this via `ProcessContext::set_latency_samples()`.
+
+### Which Plugins Report Latency
+
+| Plugin | Source of Latency | Typical Samples |
+|--------|-------------------|-----------------|
+| Oasis EQ | Linear phase mode (FFT-based) | FFT size / 2 |
+| Oasis Comp | Lookahead | User-set (e.g. 0–5ms → 0–220 samples @ 44.1kHz) |
+| Oasis Limit | True peak / lookahead | ~64–256 samples |
+| Oasis DeEss | Lookahead | Similar to Comp |
+| Any plugin | Oversampling | Filter group delay × oversample factor |
+
+### Implementation Pattern
+
+```rust
+// In the Plugin impl
+fn initialize(&mut self, ..., context: &mut impl InitContext<Self>) -> bool {
+    // Report latency during init
+    let latency = self.processor.compute_latency_samples(&self.sample_rate_ctx);
+    context.set_latency_samples(latency);
+    true
+}
+
+fn process(&mut self, ..., context: &mut impl ProcessContext<Self>) -> ProcessStatus {
+    // Re-report if latency-affecting parameters changed (e.g. lookahead toggled)
+    if self.latency_changed.swap(false, Ordering::Relaxed) {
+        let latency = self.processor.compute_latency_samples(&self.sample_rate_ctx);
+        context.set_latency_samples(latency);
+    }
+    // ... process audio ...
+}
+```
+
+**Rule:** When a latency-affecting parameter changes (lookahead on/off, linear phase toggle, oversample factor), set a flag that the audio thread checks to re-report latency. The flag is an `AtomicBool` — no allocation, no blocking.
+
+---
+
+## Error Handling Strategy
+
+### Audio Thread: No Panics, No Errors — Defensive Defaults
+
+The audio thread cannot fail. Every edge case must produce a safe output.
+
+```rust
+// NaN/Inf protection at DSP stage boundaries
+#[inline]
+pub fn sanitize(x: f32) -> f32 {
+    if x.is_finite() { x } else { 0.0 }
+}
+
+// Apply after any nonlinear operation that could produce NaN/Inf
+let output = sanitize(waveshaper_output);
+```
+
+| Edge Case | Response |
+|-----------|----------|
+| NaN/Inf from DSP | Replace with 0.0, log in debug builds |
+| Sample rate = 0 | Default to 44100.0 |
+| Buffer size = 0 | Return immediately (ProcessStatus::Normal) |
+| Parameter out of range | Clamp to valid range |
+| Division by zero risk | Guard with epsilon or pre-check |
+
+### UI Thread: Graceful Recovery
+
+```rust
+// Preset loading with clear error reporting
+match OasisPreset::load(path) {
+    Ok(preset) => apply_preset(preset, params, setter),
+    Err(PresetError::WrongPlugin { expected, got }) => {
+        show_error_toast(&format!("This preset is for {}, not {}", got, expected));
+    }
+    Err(PresetError::CorruptFile) => {
+        show_error_toast("Preset file is corrupt or unreadable");
+    }
+    Err(PresetError::VersionTooNew { file_ver, plugin_ver }) => {
+        show_error_toast(&format!("Preset requires v{}, you have v{}", file_ver, plugin_ver));
+    }
+}
+```
+
+### Debug-Only Error Tracking
+
+```rust
+#[cfg(feature = "debug-dsp")]
+pub struct ErrorTracker {
+    nan_count: AtomicU64,
+    inf_count: AtomicU64,
+    denormal_count: AtomicU64,
+    clamp_count: AtomicU64,
 }
 ```
 
@@ -815,7 +1041,7 @@ impl Oscillator {
 
 ### Visual Theme: Monochrome Minimalist
 
-Inspired by Apple's design language — clean, spacious, sophisticated.
+Clean, spacious, sophisticated. Dark backgrounds, white-on-dark typography, one accent color.
 
 ```rust
 // oasis_ui/src/theme.rs
@@ -824,53 +1050,55 @@ pub mod colors {
     use vizia::vg::Color;
     
     // Base palette (monochrome)
-    pub const BG_DARK: Color = Color::rgb(18, 18, 18);       // #121212
-    pub const BG_MID: Color = Color::rgb(28, 28, 30);        // #1c1c1e
-    pub const BG_LIGHT: Color = Color::rgb(44, 44, 46);      // #2c2c2e
+    pub const BG_DARK: Color = Color::rgb(18, 18, 18);        // #121212 — deepest background
+    pub const BG_MID: Color = Color::rgb(28, 28, 30);         // #1c1c1e — panels, sections
+    pub const BG_LIGHT: Color = Color::rgb(44, 44, 46);       // #2c2c2e — raised elements
+    pub const BG_ELEVATED: Color = Color::rgb(58, 58, 60);    // #3a3a3c — dropdowns, tooltips
     
-    pub const FG_PRIMARY: Color = Color::rgb(255, 255, 255); // #ffffff
-    pub const FG_SECONDARY: Color = Color::rgb(152, 152, 157); // #98989d
-    pub const FG_TERTIARY: Color = Color::rgb(99, 99, 102);  // #636366
+    pub const FG_PRIMARY: Color = Color::rgb(255, 255, 255);  // #ffffff
+    pub const FG_SECONDARY: Color = Color::rgb(152, 152, 157);// #98989d
+    pub const FG_TERTIARY: Color = Color::rgb(99, 99, 102);   // #636366
+    pub const FG_DISABLED: Color = Color::rgb(72, 72, 74);    // #48484a
     
-    // Accent (subtle)
-    pub const ACCENT: Color = Color::rgb(10, 132, 255);      // #0a84ff (Apple blue)
+    // Accent (subtle blue)
+    pub const ACCENT: Color = Color::rgb(10, 132, 255);       // #0a84ff
     pub const ACCENT_DIM: Color = Color::rgba(10, 132, 255, 128);
     
     // Meters
-    pub const METER_GREEN: Color = Color::rgb(52, 199, 89);  // #34c759
+    pub const METER_GREEN: Color = Color::rgb(52, 199, 89);   // #34c759
     pub const METER_YELLOW: Color = Color::rgb(255, 214, 10); // #ffd60a
-    pub const METER_RED: Color = Color::rgb(255, 69, 58);    // #ff453a
+    pub const METER_RED: Color = Color::rgb(255, 69, 58);     // #ff453a
     
     // Interactive states
     pub const HOVER: Color = Color::rgba(255, 255, 255, 20);
     pub const ACTIVE: Color = Color::rgba(255, 255, 255, 40);
+    pub const FOCUS_RING: Color = Color::rgba(10, 132, 255, 180);
 }
 
 pub mod spacing {
-    pub const UNIT: f32 = 4.0;       // Base unit (4px)
-    pub const XS: f32 = 4.0;         // 1 unit
-    pub const SM: f32 = 8.0;         // 2 units
-    pub const MD: f32 = 16.0;        // 4 units
-    pub const LG: f32 = 24.0;        // 6 units
-    pub const XL: f32 = 32.0;        // 8 units
-    pub const XXL: f32 = 48.0;       // 12 units
+    pub const UNIT: f32 = 4.0;
+    pub const XS: f32 = 4.0;
+    pub const SM: f32 = 8.0;
+    pub const MD: f32 = 16.0;
+    pub const LG: f32 = 24.0;
+    pub const XL: f32 = 32.0;
+    pub const XXL: f32 = 48.0;
 }
 
 pub mod typography {
-    pub const FONT_FAMILY: &str = "SF Pro Display";  // Embedded
+    pub const FONT_FAMILY: &str = "Inter";
+    pub const FONT_FAMILY_MEDIUM: &str = "Inter Medium";
+    pub const FONT_FAMILY_SEMIBOLD: &str = "Inter SemiBold";
     pub const FONT_SIZE_XS: f32 = 10.0;
     pub const FONT_SIZE_SM: f32 = 12.0;
     pub const FONT_SIZE_MD: f32 = 14.0;
     pub const FONT_SIZE_LG: f32 = 18.0;
     pub const FONT_SIZE_XL: f32 = 24.0;
-    pub const FONT_WEIGHT_REGULAR: u32 = 400;
-    pub const FONT_WEIGHT_MEDIUM: u32 = 500;
-    pub const FONT_WEIGHT_SEMIBOLD: u32 = 600;
 }
 
 pub mod animation {
-    pub const TRANSITION_FAST: f32 = 0.1;   // 100ms
-    pub const TRANSITION_NORMAL: f32 = 0.2; // 200ms
+    pub const TRANSITION_FAST: f32 = 0.1;
+    pub const TRANSITION_NORMAL: f32 = 0.2;
     pub const METER_ATTACK_MS: f32 = 5.0;
     pub const METER_RELEASE_MS: f32 = 300.0;
 }
@@ -925,15 +1153,11 @@ impl View for Knob {
 
 ### Font Embedding
 
+Inter is open-source (SIL Open Font License), excellent for UI at all sizes, and legally redistributable.
+
 ```rust
 // oasis_ui/src/fonts.rs
 
-// Font data embedded at compile time
-pub static SF_PRO_REGULAR: &[u8] = include_bytes!("../assets/fonts/SFProDisplay-Regular.otf");
-pub static SF_PRO_MEDIUM: &[u8] = include_bytes!("../assets/fonts/SFProDisplay-Medium.otf");
-pub static SF_PRO_SEMIBOLD: &[u8] = include_bytes!("../assets/fonts/SFProDisplay-Semibold.otf");
-
-// Alternative: Inter (open source, excellent for UI)
 pub static INTER_REGULAR: &[u8] = include_bytes!("../assets/fonts/Inter-Regular.otf");
 pub static INTER_MEDIUM: &[u8] = include_bytes!("../assets/fonts/Inter-Medium.otf");
 pub static INTER_SEMIBOLD: &[u8] = include_bytes!("../assets/fonts/Inter-SemiBold.otf");
@@ -976,7 +1200,6 @@ mod presets;
 
 pub use plugin::OasisEq;
 
-nih_export_clap!(OasisEq);
 nih_export_vst3!(OasisEq);
 ```
 
@@ -1062,14 +1285,13 @@ impl Plugin for OasisEq {
         _aux: &mut AuxiliaryBuffers,
         _context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
-        // Denormal protection
         let _guard = DenormalGuard::new();
+
+        // --- See "Processing Strategies" below for which to use ---
         
         for mut channel_samples in buffer.iter_samples() {
-            // Get smoothed parameter values
             let params = self.processor.update_params(&self.params);
             
-            // Process stereo pair
             let (left, right) = channel_samples.split_at_mut(1);
             let l = left[0];
             let r = right[0];
@@ -1078,17 +1300,68 @@ impl Plugin for OasisEq {
             left[0] = out_l;
             right[0] = out_r;
             
-            // Update meters (atomic, lock-free)
             self.meter_data.update(out_l, out_r);
         }
         
-        // Update spectrum (less frequently, still lock-free)
         self.spectrum_data.update_from_buffer(buffer);
         
         ProcessStatus::Normal
     }
 }
 ```
+
+### Processing Strategies
+
+Two approaches, chosen per-plugin based on DSP complexity:
+
+#### Per-Sample Processing (simple plugins)
+
+Used when DSP is lightweight and every sample needs freshly smoothed parameters (e.g. Comp, Punch, DeEss, Wide, Drive).
+
+```rust
+for mut channel_samples in buffer.iter_samples() {
+    let gain = self.params.gain.smoothed.next();
+    // ... process one stereo pair ...
+}
+```
+
+**Pros:** Smoothest automation, simplest code.
+**Cons:** Function call overhead per sample, can't vectorize.
+
+#### Block-Based Processing (heavy plugins)
+
+Used when DSP is expensive or benefits from vectorization (e.g. EQ with 8+ filter bands, Synth, Verb, Delay with modulation). Parameters are updated once per block rather than per sample.
+
+```rust
+const BLOCK_SIZE: usize = 64;
+
+for (_, block) in buffer.iter_blocks(BLOCK_SIZE) {
+    // Advance smoothers by block size, get current values
+    let gain = self.params.gain.smoothed.next_block_exact(BLOCK_SIZE);
+    
+    // Process entire block at once (can use SIMD, vectorizes better)
+    for i in 0..block.samples() {
+        let l = block.get_mut(0)[i];
+        let r = block.get_mut(1)[i];
+        // ... process using gain[i] for per-sample smoothed value ...
+    }
+}
+```
+
+**Pros:** Cache-friendly, can vectorize inner loops, lower overhead.
+**Cons:** Slightly more complex structure.
+
+#### Guidance
+
+| Plugin | Strategy | Reason |
+|--------|----------|--------|
+| Comp, Punch, DeEss | Per-sample | Envelope detection needs per-sample accuracy |
+| Drive | Per-sample | Waveshaping with per-sample param smoothing |
+| EQ | Block-based | 8+ filter passes benefit from block processing |
+| Verb, Delay | Block-based | Heavy DSP, FDN/diffusion benefits from blocks |
+| Synth | Block-based | Multiple oscillators + filters, must vectorize |
+| Limit | Per-sample | True peak detection needs per-sample accuracy |
+| Wide, Pump | Per-sample | Lightweight DSP, per-sample is fine |
 
 ---
 
