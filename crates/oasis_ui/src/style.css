@@ -57,11 +57,11 @@
 .preset-nav-btn {
     width: 24px;
     height: 24px;
-    background-color: #2a2a2a;
+    background-color: transparent;
+    border-width: 0px;
+    border-color: transparent;
     border-radius: 4px;
     color: #98989d;
-    font-size: 16;
-    font-weight: bold;
     child-space: 1s;
     cursor: hand;
 }
@@ -73,6 +73,11 @@
 
 .preset-nav-btn:active {
     background-color: #48484a;
+}
+
+arrow-icon {
+    width: 1s;
+    height: 1s;
 }
 
 .preset-name {
@@ -215,4 +220,25 @@ param-knob {
     height: auto;
     child-top: 1s;
     child-bottom: 1s;
+}
+
+/* ── ParamButton overrides (nih_plug_vizia defaults are too dark) ── */
+param-button {
+    background-color: #3a3a3c;
+    border-color: #4a4a4c;
+    border-width: 1px;
+    border-radius: 4px;
+    color: #c0c0c0;
+    height: 22px;
+}
+
+param-button:hover {
+    background-color: #4a4a4c;
+    color: #ffffff;
+}
+
+param-button:checked {
+    background-color: #0a84ff;
+    border-color: #0a84ff;
+    color: #ffffff;
 }

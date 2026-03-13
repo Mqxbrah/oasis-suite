@@ -3,7 +3,7 @@ pub mod widgets;
 pub use nih_plug_vizia;
 pub use nih_plug_vizia::vizia;
 pub use nih_plug_vizia::ViziaState;
-pub use widgets::ParamKnob;
+pub use widgets::{Arrow, ArrowDirection, ParamKnob};
 
 use std::sync::Arc;
 

@@ -107,6 +107,7 @@ impl View for ParamKnob {
                     self.param_ptr,
                     new_value,
                 ));
+                cx.needs_redraw();
             }
             KnobEvent::DragEnd => {
                 cx.release();

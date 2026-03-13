@@ -2,7 +2,7 @@ use nih_plug::prelude::*;
 use nih_plug_vizia::vizia::prelude::*;
 use nih_plug_vizia::widgets::*;
 use nih_plug_vizia::{assets, create_vizia_editor, ViziaTheming};
-use oasis_ui::ParamKnob;
+use oasis_ui::{Arrow, ArrowDirection, ParamKnob};
 use std::sync::Arc;
 
 use crate::params::OasisWideParams;
@@ -43,7 +43,7 @@ impl PresetBrowser {
                 Button::new(
                     cx,
                     |cx| cx.emit(PresetAction::Previous),
-                    |cx| Label::new(cx, "<"),
+                    |cx| { Arrow::new(cx, ArrowDirection::Left); },
                 )
                 .class("preset-nav-btn");
 
@@ -53,7 +53,7 @@ impl PresetBrowser {
                 Button::new(
                     cx,
                     |cx| cx.emit(PresetAction::Next),
-                    |cx| Label::new(cx, ">"),
+                    |cx| { Arrow::new(cx, ArrowDirection::Right); },
                 )
                 .class("preset-nav-btn");
             })
