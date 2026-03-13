@@ -24,6 +24,8 @@
     layout-type: row;
     child-top: 1s;
     child-bottom: 1s;
+    overflow: visible;
+    z-index: 100;
 }
 
 .header-title {
@@ -52,6 +54,8 @@
     child-bottom: 1s;
     col-between: 2px;
     left: 1s;
+    overflow: visible;
+    z-index: 100;
 }
 
 arrow-btn {
@@ -77,6 +81,8 @@ arrow-btn:active {
     height: auto;
     left: 2px;
     right: 2px;
+    overflow: visible;
+    z-index: 100;
 }
 
 .preset-name {
@@ -96,13 +102,14 @@ arrow-btn:active {
 
 dropdown-overlay {
     position-type: self-directed;
-    z-index: 200;
+    z-index: 9999;
     width: 160px;
     height: auto;
     top: 30px;
     left: 0px;
     child-space: 4px;
     row-between: 0px;
+    overflow: visible;
 }
 
 dropdown-overlay:not(.dropdown-visible) {
