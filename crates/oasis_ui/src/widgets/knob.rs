@@ -1,6 +1,7 @@
 use nih_plug::prelude::Param;
 use nih_plug_vizia::vizia::prelude::*;
 use nih_plug_vizia::vizia::vg;
+use nih_plug_vizia::widgets::util::ModifiersExt;
 use nih_plug_vizia::widgets::RawParamEvent;
 use std::f32::consts::PI;
 
@@ -122,7 +123,7 @@ impl View for ParamKnob {
         });
     }
 
-    fn draw(&self, cx: &mut DrawContext, canvas: &Canvas) {
+    fn draw(&self, cx: &mut DrawContext, canvas: &mut Canvas) {
         let bounds = cx.bounds();
         if bounds.w == 0.0 || bounds.h == 0.0 {
             return;
