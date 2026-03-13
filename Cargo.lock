@@ -2023,7 +2023,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "oasis_pump"
+version = "1.0.0"
+dependencies = [
+ "nih_plug",
+ "nih_plug_vizia",
+ "oasis_core",
+ "oasis_ui",
+]
+
+[[package]]
 name = "oasis_punch"
+version = "1.0.0"
+dependencies = [
+ "nih_plug",
+ "nih_plug_vizia",
+ "oasis_core",
+ "oasis_ui",
+]
+
+[[package]]
+name = "oasis_shift"
+version = "1.0.0"
+dependencies = [
+ "nih_plug",
+ "nih_plug_vizia",
+ "oasis_core",
+ "oasis_ui",
+]
+
+[[package]]
+name = "oasis_synth"
 version = "1.0.0"
 dependencies = [
  "nih_plug",
