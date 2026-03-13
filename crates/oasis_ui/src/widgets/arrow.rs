@@ -30,31 +30,34 @@ impl View for Arrow {
 
         let w = bounds.w;
         let h = bounds.h;
-        let cx_pos = bounds.x + w * 0.5;
-        let cy_pos = bounds.y + h * 0.5;
+        let center_x = bounds.x + w * 0.5;
+        let center_y = bounds.y + h * 0.5;
 
-        let tri_w = w * 0.35;
-        let tri_h = h * 0.4;
+        let tri_w = w * 0.3;
+        let tri_h = h * 0.3;
 
         let mut path = vg::Path::new();
         match self.direction {
             ArrowDirection::Left => {
-                path.move_to(cx_pos - tri_w * 0.5, cy_pos);
-                path.line_to(cx_pos + tri_w * 0.5, cy_pos - tri_h);
-                path.line_to(cx_pos + tri_w * 0.5, cy_pos + tri_h);
+                path.move_to(center_x - tri_w * 0.5, center_y);
+                path.line_to(center_x + tri_w * 0.5, center_y - tri_h);
+                path.line_to(center_x + tri_w * 0.5, center_y + tri_h);
             }
             ArrowDirection::Right => {
-                path.move_to(cx_pos + tri_w * 0.5, cy_pos);
-                path.line_to(cx_pos - tri_w * 0.5, cy_pos - tri_h);
-                path.line_to(cx_pos - tri_w * 0.5, cy_pos + tri_h);
+                path.move_to(center_x + tri_w * 0.5, center_y);
+                path.line_to(center_x - tri_w * 0.5, center_y - tri_h);
+                path.line_to(center_x - tri_w * 0.5, center_y + tri_h);
             }
         }
         path.close();
 
-        let opacity = cx.opacity();
-        let mut color: vg::Color = cx.font_color().into();
-        color.set_alphaf(color.a * opacity);
-        let paint = vg::Paint::color(color);
+        let color: vg::Color = cx.font_color().into();
+        // Fall back to a visible gray if font_color comes back as fully transparent
+        let paint = if color.a < 0.01 {
+            vg::Paint::color(vg::Color::rgb(152, 152, 157))
+        } else {
+            vg::Paint::color(color)
+        };
         canvas.fill_path(&path, &paint);
     }
 }

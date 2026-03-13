@@ -57,12 +57,12 @@
 .preset-nav-btn {
     width: 24px;
     height: 24px;
-    background-color: transparent;
+    background-color: #2a2a2a;
     border-width: 0px;
     border-color: transparent;
     border-radius: 4px;
     color: #98989d;
-    child-space: 1s;
+    child-space: 0px;
     cursor: hand;
 }
 
@@ -76,8 +76,13 @@
 }
 
 arrow-icon {
-    width: 1s;
-    height: 1s;
+    width: 24px;
+    height: 24px;
+    color: #98989d;
+}
+
+arrow-icon:hover {
+    color: #ffffff;
 }
 
 .preset-name {
@@ -286,7 +291,7 @@ param-button:hover {
 }
 
 param-button:checked {
-    background-color: #0a84ff;
-    border-color: #0a84ff;
-    color: #ffffff;
+    background-color: #e0e0e0;
+    border-color: #e0e0e0;
+    color: #121212;
 }
