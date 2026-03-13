@@ -75,3 +75,57 @@ Copy to `/Library/Audio/Plug-Ins/VST3/` for FL Studio to pick up.
 **Problem:** nih-plug internally depends on `atomic_float = "0.1"` while the workspace specified `atomic_float = "1"`. Both versions can coexist in the dependency tree, but be aware that `oasis_core` uses `atomic_float v1.x` (the `AtomicF32`/`AtomicF64` types) while nih-plug's internals use `atomic_float v0.1`. Don't try to pass atomic float types between oasis_core and nih-plug directly — they're different types from different crate versions.
 
 ---
+
+## 6. Double Unit Suffixes (`.with_unit()` + Custom Formatter)
+
+**Problem:** When a parameter uses both `.with_unit(" ms")` and `.with_value_to_string(Arc::new(|v| format!("{:.1} ms", v)))`, the unit appears twice: "13.3 ms ms". The `.with_unit()` appends the unit string *after* whatever `value_to_string` returns.
+
+**Wrong:** Using both `.with_unit()` and a custom `value_to_string` that already includes the unit:
+```rust
+FloatParam::new(...)
+    .with_unit(" ms")                                           // ← appends " ms"
+    .with_value_to_string(Arc::new(|v| format!("{:.1} ms", v))) // ← also has " ms"
+    // Result: "13.3 ms ms"
+```
+
+**Correct:** Either use `.with_unit()` with a plain formatter (no unit in the format string), OR use a custom `value_to_string` that includes the unit and omit `.with_unit()`:
+```rust
+// Option A: omit .with_unit(), include unit in formatter
+FloatParam::new(...)
+    .with_value_to_string(formatting::v2s_ms())  // returns "13.3 ms"
+    .with_string_to_value(formatting::s2v_ms())
+
+// Option B: use .with_unit() with plain number formatter
+FloatParam::new(...)
+    .with_unit(" ms")
+    .with_value_to_string(formatters::v2s_f32_rounded(1))  // returns "13.3"
+```
+
+All `oasis_core::params::formatting` functions include the unit in the string. Do NOT combine them with `.with_unit()`.
+
+---
+
+## 7. Vizia Borrow Conflict in Event Handlers (`cx.data()` + `cx.emit()`)
+
+**Problem:** In a vizia `View::event` handler, calling `cx.data::<Data>()` borrows `cx` immutably. You cannot then call `cx.emit()` (which borrows `cx` mutably) while that reference is alive.
+
+**Wrong:**
+```rust
+if let Some(data) = cx.data::<Data>() {
+    let ptr = data.params.width.as_ptr();  // immutable borrow alive
+    cx.emit(RawParamEvent::SetParameterNormalized(ptr, 0.5));  // ERROR: mutable borrow
+}
+```
+
+**Correct:** Collect what you need into a local `Vec`, drop the borrow, then emit:
+```rust
+let updates: Vec<(ParamPtr, f32)> = if let Some(data) = cx.data::<Data>() {
+    vec![(data.params.width.as_ptr(), 0.5)]  // collect and return
+} else { return; };
+// borrow released
+for (ptr, val) in updates {
+    cx.emit(RawParamEvent::SetParameterNormalized(ptr, val));
+}
+```
+
+---

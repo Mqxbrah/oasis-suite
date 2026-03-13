@@ -133,15 +133,31 @@ Wire everything together following the template in ARCHITECTURE.md:
 
 ### Step 7: ui.rs
 
-Build the UI using `oasis_ui` widgets and theme. Follow the layout philosophy:
-- Left: input section
-- Center: main controls
-- Right: output section
-- Metering always visible
+Build the UI using `oasis_ui` widgets and theme. Follow these requirements:
+
+**Header bar (mandatory, identical across all plugins):**
+- Plugin name (bold, left-aligned)
+- Version label
+- Preset browser (right-aligned): `◀ Preset Name ▶` with left/right arrow buttons
+
+**Content area layout:**
+- Two-column layout with grouped sections
+- Each section has a title label (uppercase, muted color) and `ParamSlider`/`ParamButton` rows
+- Use `ParamSliderStyle::Centered` for bipolar params (gain), `FromLeft` for unipolar (width, mix)
+- Use `ParamButton` for bool and enum params
+
+**Footer:**
+- "Oasis Suite" branding text, small and muted
+
+**Dark theme:** All plugins use the shared `oasis_ui::stylesheet()` which sets `#121212` background, `#1a1a1a` section panels, `#e0e0e0` text. Do NOT use `ViziaTheming::Default` — always use `ViziaTheming::Custom`.
+
+**Preset browser implementation:** See ARCHITECTURE.md "Preset Browser UI" section. The key pattern is collecting `ParamPtr` values from the `Data` lens, dropping the borrow, then emitting `RawParamEvent`s.
 
 ### Step 8: presets.rs
 
 Add at minimum an "Init" preset with sensible defaults. Add category-based factory presets. All values are normalized (0.0–1.0) for forward compatibility.
+
+**Preset storage:** Use `AtomicUsize` for `CURRENT_PRESET_INDEX`. Provide `next_preset()` and `prev_preset()` functions that atomically cycle the index. The preset browser calls these from UI event handlers.
 
 ### Step 9: Build & Verify
 

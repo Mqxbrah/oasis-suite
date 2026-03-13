@@ -1752,6 +1752,44 @@ impl OasisPreset {
 
 **Forward compatibility:** When loading a preset from an older version, unknown parameters are ignored. When loading from a newer version, missing parameters keep their current values. This means presets never break across updates.
 
+### Preset Browser UI (Header Bar)
+
+Every plugin has a preset browser in the header bar. This is a standard component across all plugins — same look, same behavior.
+
+**Layout:** Left/right arrow buttons flanking the current preset name, right-aligned in the header bar.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  OASIS WIDE   v1.0                    ◀  Subtle Spread  ▶  │
+├─────────────────────────────────────────────────────────────┤
+│  (plugin content below)                                     │
+```
+
+**Implementation pattern:** Each plugin defines a `PresetBrowser` view that:
+
+1. Emits `PresetAction::Next` / `PresetAction::Previous` from button clicks
+2. In the `View::event` handler, advances the global `CURRENT_PRESET_INDEX` atomic
+3. Collects `(ParamPtr, f32)` pairs from the `Data` lens (immutable borrow)
+4. Drops the immutable borrow, then emits `RawParamEvent` for each param (mutable borrow)
+
+**Critical borrow pattern:** You cannot hold an immutable reference to `cx.data::<Data>()` while calling `cx.emit()`. Collect all param pointers into a `Vec` first, release the borrow, then emit:
+
+```rust
+let updates: Vec<(ParamPtr, f32)> = if let Some(data) = cx.data::<Data>() {
+    // collect pointers here (immutable borrow of cx)
+    ...
+} else { return; };
+
+// Borrow released — now safe to emit (mutable borrow of cx)
+for (ptr, val) in updates {
+    cx.emit(RawParamEvent::BeginSetParameter(ptr));
+    cx.emit(RawParamEvent::SetParameterNormalized(ptr, val));
+    cx.emit(RawParamEvent::EndSetParameter(ptr));
+}
+```
+
+**Preset values use normalized floats (0.0–1.0)** stored as `&[(&str, f32)]` where the `&str` is the param ID. The `PresetBrowser` maps param IDs to `ParamPtr` via a match on the known param field names.
+
 ---
 
 ## Testing Strategy
