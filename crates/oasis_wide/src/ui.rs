@@ -10,9 +10,22 @@ use crate::presets;
 #[derive(Lens, Clone)]
 struct Data {
     params: Arc<OasisWideParams>,
+    preset_name: String,
 }
 
-impl Model for Data {}
+enum DataEvent {
+    PresetChanged,
+}
+
+impl Model for Data {
+    fn event(&mut self, _cx: &mut EventContext, event: &mut Event) {
+        event.map(|e, _| match e {
+            DataEvent::PresetChanged => {
+                self.preset_name = presets::current_preset_name().to_string();
+            }
+        });
+    }
+}
 
 #[derive(Debug)]
 enum PresetAction {
@@ -29,18 +42,17 @@ impl PresetBrowser {
                 Button::new(
                     cx,
                     |cx| cx.emit(PresetAction::Previous),
-                    |cx| Label::new(cx, "\u{25C0}"),
+                    |cx| Label::new(cx, "<"),
                 )
                 .class("preset-nav-btn");
 
-                Label::new(cx, "Init")
-                    .class("preset-name")
-                    .id("preset-label");
+                Label::new(cx, Data::preset_name)
+                    .class("preset-name");
 
                 Button::new(
                     cx,
                     |cx| cx.emit(PresetAction::Next),
-                    |cx| Label::new(cx, "\u{25B6}"),
+                    |cx| Label::new(cx, ">"),
                 )
                 .class("preset-nav-btn");
             })
@@ -64,8 +76,6 @@ impl View for PresetBrowser {
             }
             let preset = &presets::FACTORY_PRESETS[idx];
 
-            // Collect param pointers while borrowing data immutably,
-            // then release the borrow before emitting events.
             let updates: Vec<(ParamPtr, f32)> = if let Some(data) = cx.data::<Data>() {
                 let params = &data.params;
                 preset.values.iter().filter_map(|&(param_id, norm_val)| {
@@ -92,6 +102,8 @@ impl View for PresetBrowser {
                 cx.emit(RawParamEvent::SetParameterNormalized(ptr, norm_val));
                 cx.emit(RawParamEvent::EndSetParameter(ptr));
             }
+
+            cx.emit(DataEvent::PresetChanged);
         });
     }
 }
@@ -167,6 +179,7 @@ pub fn create_editor(params: Arc<OasisWideParams>) -> Option<Box<dyn Editor>> {
 
         Data {
             params: params.clone(),
+            preset_name: presets::current_preset_name().to_string(),
         }
         .build(cx);
 
